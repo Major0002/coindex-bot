@@ -1447,6 +1447,6 @@ if __name__ == '__main__':
     application.add_handler(CallbackQueryHandler(button_handler))
     
     print("✅ COIN DEX AI is running!")
-    print(f"📢 Broadcast channel: {BROADCAST_CHANNEL}")
+    #print(f"📢 Broadcast channel: {BROADCAST_CHANNEL}")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
     
