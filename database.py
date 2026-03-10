@@ -141,30 +141,7 @@ class SupportTicket(Base):
     resolved_at = Column(DateTime, nullable=True)
     
     user = relationship("User", back_populates="support_tickets")
-    
-class StakePosition(Base):
-    __tablename__ = 'stake_positions'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    token_address = Column(String(100), nullable=False)
-    token_symbol = Column(String(20), nullable=False)
-    amount = Column(Float, nullable=False)
-    apy = Column(Float, default=0.0)
-    
-    # NEW FIELDS for memecoin tracking
-    entry_price = Column(Float)  # Price when staked
-    current_price = Column(Float)  # Last updated price
-    price_change_pct = Column(Float)  # Price change since staking
-    estimated_value = Column(Float)  # amount * current_price
-    rewards_earned = Column(Float, default=0.0)
-    last_price_update = Column(DateTime)
-    
-    status = Column(String(20), default='active')
-    created_at = Column(DateTime, default=datetime.utcnow)
-    withdrawn_at = Column(DateTime)
-    
-    user = relationship("User", back_populates="stake_positions")
+
     
 # Initialize database
 def init_db(database_url):
