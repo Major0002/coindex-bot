@@ -1,6 +1,6 @@
 # database.py - COIN DEX AI - Complete Database Models
 
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -46,8 +46,8 @@ class Trade(Base):
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    token_in = Column(String(50), nullable=False)
-    token_out = Column(String(50), nullable=False)
+    token_in = Column(String(100), nullable=False)  # Increased length for contract addresses
+    token_out = Column(String(100), nullable=False)
     amount_in = Column(Float, nullable=False)
     amount_out = Column(Float)
     price = Column(Float)
@@ -112,8 +112,11 @@ class Withdrawal(Base):
     currency = Column(String(10), nullable=False)  # SOL, ETH, etc.
     amount = Column(Float, nullable=False)
     to_address = Column(String(100), nullable=False)
+    gas_fee = Column(Float, default=0.0)  # 10% gas fee amount
     gas_fee_paid = Column(Boolean, default=False)
-    status = Column(String(20), default='pending')  # pending, processing, completed, failed
+    gas_fee_tx_hash = Column(String(100), nullable=True)  # Track gas fee payment
+    status = Column(String(20), default='pending')  # pending, gas_fee_pending, processing, completed, failed
+    tx_hash = Column(String(100), nullable=True)  # Main withdrawal tx hash
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     
