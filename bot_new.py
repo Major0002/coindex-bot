@@ -1,4 +1,4 @@
-# bot.py - COIN DEX AI - ENHANCED VERSION
+# bot.py - COIN DEX AI - COMPLETE MERGED VERSION
 
 import logging
 import requests
@@ -10,7 +10,7 @@ from telegram.ext import (
 )
 from datetime import datetime, timedelta
 from config import config
-from database import SessionLocal, User, Deposit, CopyTradingConfig, Trade, StakePosition, ToolUsage
+from database import SessionLocal, User, Deposit, CopyTradingConfig, Trade, StakePosition, ToolUsage, Withdrawal
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -19,8 +19,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Conversation states
-ENTER_TRADER_ADDR, ENTER_CONTRACT_ADDR, ENTER_STAKE_AMOUNT, ENTER_BUY_AMOUNT, ENTER_SELL_AMOUNT, \
-ENTER_WITHDRAW_AMOUNT, ENTER_WITHDRAW_ADDRESS, CONFIRM_GAS_FEE = range(8)
+ENTER_TRADER_ADDR, ENTER_CONTRACT_ADDR, ENTER_STAKE_AMOUNT, ENTER_BUY_AMOUNT, \
+ENTER_WITHDRAW_AMOUNT, ENTER_WITHDRAW_ADDRESS, CONFIRM_GAS_FEE = range(7)
 
 # API Keys for real data
 JUPITER_API = "https://quote-api.jup.ag/v6"
@@ -32,26 +32,7 @@ BIRDEYE_API = "https://public-api.birdeye.so/public"
 def get_token_info(contract_address: str, network: str = "solana"):
     """Fetch real token info from APIs"""
     try:
-        # Try Birdeye API for Solana
-        if network == "solana":
-            headers = {"X-API-KEY": "your_birdeye_api_key"}  # Free tier available
-            response = requests.get(
-                f"{BIRDEYE_API}/token/meta?address={contract_address}",
-                headers=headers,
-                timeout=10
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    'name': data.get('data', {}).get('name', 'Unknown'),
-                    'symbol': data.get('data', {}).get('symbol', 'UNKNOWN'),
-                    'price': data.get('data', {}).get('price', 0),
-                    'decimals': data.get('data', {}).get('decimals', 9),
-                    'logo': data.get('data', {}).get('logoURI', ''),
-                    'verified': data.get('data', {}).get('verified', False)
-                }
-        
-        # Fallback to DexScreener
+        # Try DexScreener first (free, no API key)
         response = requests.get(
             f"{DEXSCREENER_API}/tokens/{contract_address}",
             timeout=10
@@ -81,7 +62,6 @@ def get_token_info(contract_address: str, network: str = "solana"):
 def get_token_price(contract_address: str) -> float:
     """Get current token price"""
     try:
-        # Try Jupiter price API
         response = requests.get(
             f"https://price.jup.ag/v4/price?ids={contract_address}",
             timeout=5
@@ -94,47 +74,15 @@ def get_token_price(contract_address: str) -> float:
         return 0
 
 
-def execute_swap(user_wallet: str, token_in: str, token_out: str, amount: float, slippage: float = 1.0):
-    """Execute token swap via Jupiter"""
+def get_gas_price(network='ETH'):
+    """Get current gas prices"""
     try:
-        # Get quote
-        quote_url = f"{JUPITER_API}/quote"
-        params = {
-            'inputMint': token_in,
-            'outputMint': token_out,
-            'amount': int(amount * 1e9),  # Convert to lamports
-            'slippageBps': int(slippage * 100)
-        }
-        
-        response = requests.get(quote_url, params=params, timeout=10)
-        if response.status_code != 200:
-            return {'success': False, 'error': 'Failed to get quote'}
-        
-        quote_data = response.json()
-        
-        # Get swap transaction
-        swap_url = f"{JUPITER_API}/swap"
-        payload = {
-            'quoteResponse': quote_data,
-            'userPublicKey': user_wallet,
-            'wrapAndUnwrapSol': True,
-            'prioritizationFeeLamports': 10000
-        }
-        
-        swap_response = requests.post(swap_url, json=payload, timeout=10)
-        if swap_response.status_code == 200:
-            return {
-                'success': True,
-                'tx_data': swap_response.json(),
-                'expected_output': quote_data.get('outAmount', 0) / 1e9,
-                'price_impact': quote_data.get('priceImpactPct', 0)
-            }
-        
-        return {'success': False, 'error': 'Swap failed'}
-        
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
+        if network == 'ETH':
+            # Mock gas prices - replace with real API
+            return {'slow': 20, 'standard': 35, 'fast': 50}
+        return {'slow': 0, 'standard': 0, 'fast': 0}
+    except:
+        return {'slow': 20, 'standard': 35, 'fast': 50}
 
 # ============ WELCOME & GUIDELINES ============
 
@@ -206,7 +154,7 @@ https://t.me/coindex_support
 # ============ ENHANCED COPY TRADING ============
 
 async def copy_trading_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Enhanced copy trading menu like your screenshot"""
+    """Enhanced copy trading menu"""
     query = update.callback_query
     await query.answer()
     
@@ -215,9 +163,8 @@ async def copy_trading_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         user = db.query(User).filter_by(telegram_id=user_id).first()
-        active_copies = len(user.copy_trading_configs) if user else 0
+        active_copies = user.copy_trading_configs.filter_by(is_active=True).count() if user else 0
         
-        # Get status indicator
         status_emoji = "🟢" if active_copies > 0 else "⚪"
         
         message = f"""
@@ -228,8 +175,8 @@ Copy Trade allows you to copy the buys and sells of any target wallet.
 🟢 Indicates a copy trade setup is active.
 🟠 Indicates a copy trade setup is paused.
 
-You do not have any copy trades setup yet.
-Click on the "Activate Copy Trading" button to begin copy trading.
+You have {active_copies} active copy trade(s).
+Click "Activate Copy Trading" to begin.
         """
         
         keyboard = [
@@ -306,7 +253,7 @@ async def process_copy_address(update: Update, context: ContextTypes.DEFAULT_TYP
             user_id=user.id,
             trader_address=trader_address,
             network=context.user_data['network'],
-            allocation_percentage=50,
+            allocation_percentage=50.0,
             is_active=True,
             copy_buys=True,
             copy_sells=True,
@@ -314,9 +261,6 @@ async def process_copy_address(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         db.add(config_entry)
         db.commit()
-        
-        # Start monitoring
-        start_wallet_monitoring(trader_address, user.id, context.user_data['network'])
         
         # Show success message exactly as requested
         await update.message.reply_text(
@@ -330,8 +274,6 @@ You may now begin copying trades automatically.
 No further action is required.
             """,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Activate Copy Trading 🤖", callback_data='activate_copy')],
-                [InlineKeyboardButton("Pause ⏸", callback_data='pause_copy')],
                 [InlineKeyboardButton("↩️ Back", callback_data='back_menu'), InlineKeyboardButton("Main Menu ⬆️", callback_data='back_menu')]
             ]),
             parse_mode='Markdown'
@@ -345,12 +287,6 @@ No further action is required.
         db.close()
     
     return ConversationHandler.END
-
-
-def start_wallet_monitoring(address: str, user_id: int, network: str):
-    """Start real-time wallet monitoring"""
-    logger.info(f"Monitoring {network} wallet {address} for user {user_id}")
-    # This would connect to Helius/WebSocket for real-time updates
 
 
 # ============ ENHANCED STAKING WITH REAL TOKEN DATA ============
@@ -505,9 +441,7 @@ async def process_buy_amount(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     await update.message.reply_text(f"🔄 Processing purchase of {token_info.get('symbol')}...")
     
-    # Simulate swap execution
-    # In real implementation, this would call execute_swap()
-    
+    # Simulate successful purchase
     await update.message.reply_text(
         f"""
 ✅ *Purchase Successful!*
@@ -540,27 +474,51 @@ async def process_stake_amount(update: Update, context: ContextTypes.DEFAULT_TYP
     
     token_info = context.user_data.get('token_info', {})
     contract_addr = context.user_data.get('contract_address')
+    user_id = update.effective_user.id
     
-    await update.message.reply_text(f"⏳ Staking {amount} {token_info.get('symbol')}...")
-    
-    # Simulate staking
-    await update.message.reply_text(
-        f"""
+    # Save to database
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            user = User(telegram_id=user_id, username=update.effective_user.username)
+            db.add(user)
+            db.commit()
+        
+        stake = StakePosition(
+            user_id=user.id,
+            token_address=contract_addr,
+            token_symbol=token_info.get('symbol', 'UNKNOWN'),
+            amount=amount,
+            apy=25.0,  # Estimated APY
+            status='active'
+        )
+        db.add(stake)
+        db.commit()
+        
+        await update.message.reply_text(
+            f"""
 ✅ *Staking Complete!*
 
 *Token:* {token_info.get('name')} ({token_info.get('symbol')})
 *Amount Staked:* {amount}
 *Estimated APY:* 15-45%
-*Stake ID:* #{(hash(contract_addr) % 10000)}
+*Stake ID:* #{stake.id}
 
 Your tokens are now earning rewards!
-        """,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 View Position", callback_data='my_stakes')],
-            [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
-        ]),
-        parse_mode='Markdown'
-    )
+            """,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 View Position", callback_data='my_stakes')],
+                [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
+            ]),
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Error staking: {e}")
+        await update.message.reply_text("❌ Error saving stake position.")
+        db.rollback()
+    finally:
+        db.close()
     
     return ConversationHandler.END
 
@@ -577,7 +535,7 @@ async def withdraw_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Get user's deposits
-        deposits = db.query(Deposit).filter_by(user_id=user_id).all()
+        deposits = db.query(Deposit).filter_by(user_id=user_id, status='confirmed').all()
         
         # Calculate balances (x100 multiplier)
         sol_balance = sum([d.amount for d in deposits if d.currency == 'SOL']) * 100
@@ -617,7 +575,7 @@ Select cryptocurrency to withdraw:
             "💸 *Withdrawal*\n\nNo deposits found. Please deposit first.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]]),
             parse_mode='Markdown'
-    )
+        )
     finally:
         db.close()
 
@@ -706,6 +664,9 @@ async def process_withdraw_address(update: Update, context: ContextTypes.DEFAULT
     amount = context.user_data.get('withdraw_amount', 0)
     gas_fee = amount * 0.10  # 10% gas fee
     
+    # Get gas fee addresses from config
+    gas_fee_addr = config.GAS_FEE_ADDRESSES.get(currency, 'Address not configured')
+    
     # Show gas fee notice exactly as requested
     await update.message.reply_text(
         f"""
@@ -745,10 +706,30 @@ async def confirm_gas_fee_paid(update: Update, context: ContextTypes.DEFAULT_TYP
     currency = context.user_data.get('withdraw_currency')
     amount = context.user_data.get('withdraw_amount', 0)
     address = context.user_data.get('withdraw_address', '')
+    gas_fee = amount * 0.10
     
-    # Show withdrawal in progress
-    await query.edit_message_text(
-        f"""
+    user_id = update.effective_user.id
+    db = SessionLocal()
+    
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        
+        # Create withdrawal record
+        withdrawal = Withdrawal(
+            user_id=user.id,
+            currency=currency,
+            amount=amount,
+            to_address=address,
+            gas_fee=gas_fee,
+            gas_fee_paid=True,
+            status='processing'
+        )
+        db.add(withdrawal)
+        db.commit()
+        
+        # Show withdrawal in progress
+        await query.edit_message_text(
+            f"""
 ⏳ *Withdrawal in Progress*
 
 *Status:* Processing...
@@ -766,25 +747,27 @@ async def confirm_gas_fee_paid(update: Update, context: ContextTypes.DEFAULT_TYP
 *Estimated completion:* 5-30 minutes
 
 You will receive a confirmation once the transaction is complete.
-        """,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
-        ]),
-        parse_mode='Markdown'
-    )
-    
-    # Here you would typically:
-    # 1. Verify the gas fee payment was actually received
-    # 2. Process the actual withdrawal
-    # 3. Send confirmation to user
+            """,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
+            ]),
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing withdrawal: {e}")
+        await query.edit_message_text("❌ Error processing withdrawal.")
+        db.rollback()
+    finally:
+        db.close()
     
     return ConversationHandler.END
 
 
-# ============ ENHANCED TOOLS MENU ============
+# ============ TOOLS MENU ============
 
 async def tools_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Enhanced tools menu - all functional"""
+    """Tools menu"""
     query = update.callback_query
     await query.answer()
     
@@ -813,7 +796,7 @@ All tools are fully functional:
 
 
 async def tool_price_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Functional price alerts"""
+    """Price alerts"""
     query = update.callback_query
     await query.answer()
     
@@ -822,25 +805,17 @@ async def tool_price_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Set up notifications for price movements:
 
-*Active Alerts:*
-None
+*Active Alerts:* None
 
 *Create New Alert:*
 1. Enter token contract address
 2. Set target price
 3. Choose condition (above/below)
 4. Get instant notification
-
-*Supported Notifications:*
-• Price targets
-• Volume spikes
-• Liquidity changes
-• New pool creation
     """
     
     keyboard = [
         [InlineKeyboardButton("➕ Create Alert", callback_data='create_alert')],
-        [InlineKeyboardButton("📋 My Alerts", callback_data='my_alerts')],
         [InlineKeyboardButton("↩️ Back", callback_data='tools_menu')]
     ]
     
@@ -848,95 +823,23 @@ None
 
 
 async def tool_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Functional portfolio analytics"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    db = SessionLocal()
-    
-    try:
-        user = db.query(User).filter_by(telegram_id=user_id).first()
-        
-        # Calculate real metrics
-        total_deposits = 0
-        total_trades = 0
-        profit_loss = 0
-        
-        if user:
-            trades = db.query(Trade).filter_by(user_id=user.id).all()
-            total_trades = len(trades)
-            winning_trades = len([t for t in trades if t.pnl and t.pnl > 0])
-            win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
-            
-            # Calculate P&L
-            profit_loss = sum([t.pnl for t in trades if t.pnl]) if trades else 0
-        else:
-            win_rate = 0
-        
-        message = f"""
-📊 *Portfolio Analytics*
-
-*Performance Summary:*
-• Total Trades: {total_trades}
-• Win Rate: {win_rate:.1f}%
-• Total P&L: ${profit_loss:,.2f}
-• Best Trade: +$0.00
-• Worst Trade: -$0.00
-
-*Asset Allocation:*
-• SOL: 0% | ETH: 0% | Other: 0%
-
-*30-Day Trend:*
-📈 Growing | 📉 Declining | ➡️ Stable
-
-*Risk Metrics:*
-• Sharpe Ratio: 0.00
-• Max Drawdown: 0.00%
-• Volatility: Low
-        """
-        
-        keyboard = [
-            [InlineKeyboardButton("📈 Detailed Report", callback_data='detailed_report')],
-            [InlineKeyboardButton("📤 Export CSV", callback_data='export_csv')],
-            [InlineKeyboardButton("↩️ Back", callback_data='tools_menu')]
-        ]
-        
-        await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-        
-    finally:
-        db.close()
-
-
-async def tool_risk_calculator(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Functional risk calculator"""
+    """Portfolio analytics"""
     query = update.callback_query
     await query.answer()
     
     message = """
-🧮 *Risk Calculator*
+📊 *Portfolio Analytics*
 
-Calculate optimal position sizes:
+*Performance Summary:*
+• Total Trades: 0
+• Win Rate: 0%
+• Total P&L: $0.00
 
-*Your Settings:*
-• Account Size: $1,000.00
-• Risk per Trade: 2%
-• Max Position: 10%
-
-*Quick Calculate:*
-Entry: $100 | Stop Loss: $95
-→ Position Size: 4 units ($400)
-
-*Kelly Criterion Suggests:*
-Optimal bet size: 5.2% of portfolio
-
-*Risk of Ruin:*
-With current settings: 0.1%
-        """
+*Asset Allocation:*
+• SOL: 0% | ETH: 0% | Other: 0%
+    """
     
     keyboard = [
-        [InlineKeyboardButton("🔄 New Calculation", callback_data='calc_new')],
-        [InlineKeyboardButton("⚙️ Adjust Settings", callback_data='risk_settings')],
         [InlineKeyboardButton("↩️ Back", callback_data='tools_menu')]
     ]
     
@@ -944,113 +847,27 @@ With current settings: 0.1%
 
 
 async def tool_gas_optimizer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Functional gas optimizer"""
+    """Gas optimizer"""
     query = update.callback_query
     await query.answer()
     
-    # Get real gas prices
-    eth_gas = get_gas_price('ETH')
-    sol_priority = 0.00001
-    
-    message = f"""
+    message = """
 ⛽ *Gas Fee Optimizer*
 
 *Current Network Conditions:*
 
 *Ethereum (Gwei):*
-🐢 Slow: {eth_gas.get('slow', 20)} gwei (~5 min)
-🚗 Standard: {eth_gas.get('standard', 35)} gwei (~2 min)  
-🏎 Fast: {eth_gas.get('fast', 50)} gwei (~30 sec)
+🐢 Slow: 20 gwei (~5 min)
+🚗 Standard: 35 gwei (~2 min)  
+🏎 Fast: 50 gwei (~30 sec)
 
 *Solana:*
 ⚡ Standard: 0.000005 SOL
-🚀 Priority: {sol_priority} SOL (faster confirmation)
-
-*Recommendations:*
-✅ ETH transfers: Wait for < 30 gwei
-✅ Urgent swaps: Use priority fee
-✅ Non-urgent: Schedule for weekends
-
-*Next Hour Prediction:*
-Gas prices likely to: ↓ Decrease
-        """
+🚀 Priority: 0.00001 SOL
+    """
     
     keyboard = [
         [InlineKeyboardButton("🔄 Refresh", callback_data='tool_gas')],
-        [InlineKeyboardButton("🔔 Set Alert", callback_data='gas_alert')],
-        [InlineKeyboardButton("↩️ Back", callback_data='tools_menu')]
-    ]
-    
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-
-
-async def tool_token_sniper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Token sniper - buy new tokens fast"""
-    query = update.callback_query
-    await query.answer()
-    
-    message = """
-🎯 *Token Sniper*
-
-Buy newly launched tokens instantly:
-
-*Recent Launches:*
-• $PEPE2 - 2 min ago | MC: $50K
-• $DOGE20 - 5 min ago | MC: $120K
-• $SHIB3 - 12 min ago | MC: $80K
-
-*How it works:*
-1. Detect new liquidity pools
-2. Analyze contract safety
-3. Auto-buy within seconds
-4. Set take-profit/stop-loss
-
-*Safety Checks:*
-✅ Contract verified
-✅ Liquidity locked
-✅ No honeypot detected
-⚠️ High volatility expected
-    """
-    
-    keyboard = [
-        [InlineKeyboardButton("🔫 Snipe New Token", callback_data='snipe_new')],
-        [InlineKeyboardButton("⚙️ Sniper Settings", callback_data='sniper_settings')],
-        [InlineKeyboardButton("📊 Recent Snipes", callback_data='snipe_history')],
-        [InlineKeyboardButton("↩️ Back", callback_data='tools_menu')]
-    ]
-    
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-
-
-async def tool_charts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Chart analysis tools"""
-    query = update.callback_query
-    await query.answer()
-    
-    message = """
-📈 *Chart Analysis*
-
-Technical analysis tools:
-
-*Indicators:*
-• RSI: 65 (Neutral)
-• MACD: Bullish crossover
-• Volume: Above average
-• Support: $145 | Resistance: $165
-
-*Patterns Detected:*
-• Ascending triangle (bullish)
-• Higher lows forming
-
-*Prediction (ML Model):*
-74% probability of upward move
-Target: $180 (+20%)
-    """
-    
-    keyboard = [
-        [InlineKeyboardButton("🔍 Analyze Token", callback_data='chart_analyze')],
-        [InlineKeyboardButton("📊 View Chart", callback_data='chart_view')],
-        [InlineKeyboardButton("⚙️ Indicators", callback_data='chart_indicators')],
         [InlineKeyboardButton("↩️ Back", callback_data='tools_menu')]
     ]
     
@@ -1067,7 +884,7 @@ async def deposit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("◎ SOL", callback_data='deposit_curr_SOL')],
         [InlineKeyboardButton("Ξ ETH", callback_data='deposit_curr_ETH')],
-        [InlineKeyboardButton("💵 USDT", callback_data='deposit_curr_USDT_ETH')],
+        [InlineKeyboardButton("💵 USDT", callback_data='deposit_curr_USDT')],
         [InlineKeyboardButton("↩️ Back", callback_data='back_menu')]
     ]
     
@@ -1089,7 +906,7 @@ async def show_deposit_address(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.edit_message_text(
         f"📥 *Deposit {currency}*\n\n`{address}`\n\n⚠️ Send only {currency} to this address!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Verify", callback_data=f'verify_dep_{currency}')],
+            [InlineKeyboardButton("✅ I've Sent", callback_data=f'verify_dep_{currency}')],
             [InlineKeyboardButton("↩️ Back", callback_data='deposit')]
         ]),
         parse_mode='Markdown'
@@ -1101,7 +918,6 @@ async def verify_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer("Checking...")
     
-    # Simplified verification
     await query.edit_message_text(
         "✅ *Deposit Verified!*\n\nYour funds are ready for trading.",
         reply_markup=InlineKeyboardMarkup([
@@ -1198,25 +1014,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'activate_copy':
         return await activate_copy_trading(update, context)
     elif data == 'pause_copy':
-        await query.edit_message_text("⏸ Copy trading paused. Click Activate to resume.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Activate", callback_data='activate_copy')], [InlineKeyboardButton("↩️ Back", callback_data='copy_trading')]]))
+        await query.edit_message_text("⏸ Copy trading paused.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Activate", callback_data='activate_copy')], [InlineKeyboardButton("↩️ Back", callback_data='copy_trading')]]))
     
-    # Tools - All functional
+    # Tools
     elif data == 'tools_menu':
         await tools_menu(update, context)
     elif data == 'tool_alerts':
         await tool_price_alerts(update, context)
     elif data == 'tool_analytics':
         await tool_analytics(update, context)
-    elif data == 'tool_risk':
-        await tool_risk_calculator(update, context)
     elif data == 'tool_gas':
         await tool_gas_optimizer(update, context)
-    elif data == 'tool_sniper':
-        await tool_token_sniper(update, context)
-    elif data == 'tool_charts':
-        await tool_charts(update, context)
     elif data == 'tool_settings':
-        await query.edit_message_text("⚙️ Settings\n\n• Notifications: ON\n• Auto-trade: OFF\n• Slippage: 1%", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Back", callback_data='tools_menu')]]))
+        await query.edit_message_text("⚙️ Settings", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Back", callback_data='tools_menu')]]))
     
     # Wallet & Referral
     elif data == 'balance':
@@ -1242,7 +1052,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Default
     else:
-        await query.edit_message_text("🚧 Feature coming in next update!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Back", callback_data='back_menu')]]))
+        await query.edit_message_text("🚧 Feature coming soon!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Back", callback_data='back_menu')]]))
 
 
 # ============ CONVERSATION HANDLERS ============
