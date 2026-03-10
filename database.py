@@ -112,7 +112,60 @@ class ToolUsage(Base):
     last_used = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="tool_usage")
+class TokenPriceHistory(Base):
+    __tablename__ = 'token_price_history'
+    
+    id = Column(Integer, primary_key=True)
+    token_address = Column(String(100), nullable=False, index=True)
+    token_symbol = Column(String(20))
+    price = Column(Float, nullable=False)
+    market_cap = Column(Float)
+    volume_24h = Column(Float)
+    liquidity = Column(Float)
+    price_change_24h = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    # Optional: track which user requested this token
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    user = relationship("User", back_populates="token_history")
 
+class SupportTicket(Base):
+    __tablename__ = 'support_tickets'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    issue_type = Column(String(50))  # deposit, withdrawal, staking, etc.
+    description = Column(Text)
+    status = Column(String(20), default='open')  # open, resolved, closed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    
+    user = relationship("User", back_populates="support_tickets")
+    
+class StakePosition(Base):
+    __tablename__ = 'stake_positions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    token_address = Column(String(100), nullable=False)
+    token_symbol = Column(String(20), nullable=False)
+    amount = Column(Float, nullable=False)
+    apy = Column(Float, default=0.0)
+    
+    # NEW FIELDS for memecoin tracking
+    entry_price = Column(Float)  # Price when staked
+    current_price = Column(Float)  # Last updated price
+    price_change_pct = Column(Float)  # Price change since staking
+    estimated_value = Column(Float)  # amount * current_price
+    rewards_earned = Column(Float, default=0.0)
+    last_price_update = Column(DateTime)
+    
+    status = Column(String(20), default='active')
+    created_at = Column(DateTime, default=datetime.utcnow)
+    withdrawn_at = Column(DateTime)
+    
+    user = relationship("User", back_populates="stake_positions")
+    
 # Initialize database
 def init_db(database_url):
     engine = create_engine(database_url)
@@ -120,3 +173,4 @@ def init_db(database_url):
     return sessionmaker(bind=engine)
 
 SessionLocal = init_db("sqlite:///trading_bot.db")
+
