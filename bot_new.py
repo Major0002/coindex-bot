@@ -72,7 +72,7 @@ Hello {user.first_name}! Your professional DeFi trading companion.
         [InlineKeyboardButton("🟢 Stake Assets", callback_data='stake'), InlineKeyboardButton("💼 Wallet", callback_data='balance')],
         [InlineKeyboardButton("🛠 Tools", callback_data='tools')],
         [InlineKeyboardButton("💰 Referral", callback_data='referral'), InlineKeyboardButton("📈 Copy Trading", callback_data='copy_trading')],
-        [InlineKeyboardButton("🤝 Support", callback_data='support')]
+        [InlineKeyboardButton("📢 Join Channel", url=BROADCAST_CHANNEL), InlineKeyboardButton("🤝 Support", callback_data='support')]
     ]
 
     if update.message:
@@ -1447,6 +1447,6 @@ if __name__ == '__main__':
     application.add_handler(CallbackQueryHandler(button_handler))
     
     print("✅ COIN DEX AI is running!")
-    #print(f"📢 Broadcast channel: {BROADCAST_CHANNEL}")
+    print(f"📢 Broadcast channel: {BROADCAST_CHANNEL}")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
     
