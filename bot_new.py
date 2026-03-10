@@ -855,6 +855,42 @@ What would you like to do?
     
     return ConversationHandler.END
 
+async def process_stake_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process stake amount"""
+    try:
+        amount = float(update.message.text)
+        if amount <= 0:
+            raise ValueError("Must be positive")
+    except ValueError:
+        await update.message.reply_text("❌ Please enter a valid number.")
+        return ConversationHandler.END
+    
+    token_info = context.user_data.get('token_info', {})
+    contract_addr = context.user_data.get('contract_address')
+    
+    # Show buy/stake options
+    keyboard = [
+        [InlineKeyboardButton(f"💰 Buy & Stake {token_info.get('symbol', 'TOKEN')}", callback_data=f'buy_stake_{contract_addr}_{amount}')],
+        [InlineKeyboardButton(f"📥 Stake Only (if you have {token_info.get('symbol')})", callback_data=f'stake_only_{contract_addr}_{amount}')],
+        [InlineKeyboardButton("Cancel", callback_data='stake')]
+    ]
+    
+    await update.message.reply_text(
+        f"""
+💡 *Choose Action*
+
+You entered: {amount} {token_info.get('symbol', 'tokens')}
+
+*Options:*
+1. Buy tokens first, then stake automatically
+2. Stake tokens you already own
+
+Select an option:
+        """,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
+    return ConversationHandler.END
 
 async def my_stakes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show user's staking positions"""
