@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 ENTER_TRADER_ADDR, ENTER_CONTRACT_ADDR, ENTER_STAKE_AMOUNT, ENTER_WITHDRAW_ADDR = range(4)
 
 # Broadcast channel
-# BROADCAST_CHANNEL = "https://t.me/coindexai"
+BROADCAST_CHANNEL = "https://t.me/coindexai"
 
 # ============ WELCOME & GUIDELINES ============
 
