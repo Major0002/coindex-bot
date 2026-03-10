@@ -112,37 +112,7 @@ class ToolUsage(Base):
     last_used = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="tool_usage")
-class TokenPriceHistory(Base):
-    __tablename__ = 'token_price_history'
-    
-    id = Column(Integer, primary_key=True)
-    token_address = Column(String(100), nullable=False, index=True)
-    token_symbol = Column(String(20))
-    price = Column(Float, nullable=False)
-    market_cap = Column(Float)
-    volume_24h = Column(Float)
-    liquidity = Column(Float)
-    price_change_24h = Column(Float)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    
-    # Optional: track which user requested this token
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
-    user = relationship("User", back_populates="token_history")
 
-class SupportTicket(Base):
-    __tablename__ = 'support_tickets'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    issue_type = Column(String(50))  # deposit, withdrawal, staking, etc.
-    description = Column(Text)
-    status = Column(String(20), default='open')  # open, resolved, closed
-    created_at = Column(DateTime, default=datetime.utcnow)
-    resolved_at = Column(DateTime, nullable=True)
-    
-    user = relationship("User", back_populates="support_tickets")
-
-    
 # Initialize database
 def init_db(database_url):
     engine = create_engine(database_url)
