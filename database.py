@@ -120,3 +120,22 @@ def init_db(database_url):
     return sessionmaker(bind=engine)
 
 SessionLocal = init_db("sqlite:///trading_bot.db")
+# Add this to your database.py models
+
+class Withdrawal(Base):
+    __tablename__ = 'withdrawals'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    currency = Column(String(10), nullable=False)  # SOL, ETH, etc.
+    amount = Column(Float, nullable=False)
+    to_address = Column(String(100), nullable=False)
+    gas_fee_paid = Column(Boolean, default=False)
+    status = Column(String(20), default='pending')  # pending, processing, completed, failed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    
+    user = relationship("User", back_populates="withdrawals")
+
+# Add to User model:
+# withdrawals = relationship("Withdrawal", back_populates="user", lazy='dynamic')
