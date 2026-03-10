@@ -1258,6 +1258,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith('copy_addr_'):
         await copy_address(update, context)
     
+    # Support
+    elif data == 'support':
+        await support(update, context)
+    elif data == 'support_faq':
+        await support_faq(update, context)
+    
     # Staking
     elif data == 'stake':
         await stake_menu(update, context)
