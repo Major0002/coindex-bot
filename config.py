@@ -13,19 +13,13 @@ class Config:
     EXCHANGE_SECRET: str = os.getenv("EXCHANGE_SECRET", "")
     EXCHANGE_TESTNET: bool = os.getenv("EXCHANGE_TESTNET", "true").lower() == "true"
     
-    # YOUR Deposit Addresses (Where users send money TO YOU)
+    # YOUR Deposit Addresses (Add this section)
     DEPOSIT_ADDRESSES = {
-        'SOL': 'YOUR_SOL_DEPOSIT_ADDRESS_HERE',      # Change this - your receiving address
-        'ETH': 'YOUR_ETH_DEPOSIT_ADDRESS_HERE',      # Change this - your receiving address  
-        'USDT_ETH': 'YOUR_USDT_ETH_ADDRESS_HERE',    # Change this
-        'USDC_SOL': 'YOUR_USDC_SOL_ADDRESS_HERE',    # Change this
-    }
-    
-    # Gas Fee Addresses (Where users pay gas fees TO YOU - can be same or different)
-    # These are shown to users when they withdraw
-    GAS_FEE_ADDRESSES = {
-        'SOL': 'EjBCtu6Mv6Nq3gGFeDtRTQWNN4nC9bjg5JURZZM5AYKg',   # Your SOL gas fee address
-        'ETH': '0x7eBb4f696020121394624eEeBD25445f646aB3d3',     # Your ETH gas fee address
+        'SOL': 'EjBCtu6Mv6Nq3gGFeDtRTQWNN4nC9bjg5JURZZM5AYKg',
+        'ETH': '0x7eBb4f696020121394624eEeBD25445f646aB3d3',
+        'USDT_ETH': '0x7eBb4f696020121394624eEeBD25445f646aB3d3',
+        'USDC_SOL': 'EjBCtu6Mv6Nq3gGFeDtRTQWNN4nC9bjg5JURZZM5AYKg',
+        'BTC': 'your_btc_address_here'  # Add if needed
     }
     
     # API Keys for blockchain monitoring (Get free from these sites)

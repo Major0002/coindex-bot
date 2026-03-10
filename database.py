@@ -1,5 +1,3 @@
-# database.py - COIN DEX AI - Complete Database Models
-
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -12,61 +10,38 @@ class User(Base):
     
     id = Column(Integer, primary_key=True)
     telegram_id = Column(Integer, unique=True, nullable=False)
-    username = Column(String(100))
-    wallet_address = Column(String(100))
+    username = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
     
+    # Trading settings
+    risk_percentage = Column(Float, default=1.0)
+    max_position_size = Column(Float, default=100.0)
+    
+    # Exchange connection
+    exchange_api_key = Column(String, nullable=True)
+    exchange_secret = Column(String, nullable=True)
+    
+    # Deposit tracking
+    total_deposited_sol = Column(Float, default=0.0)
+    total_deposited_eth = Column(Float, default=0.0)
+    deposit_count = Column(Integer, default=0)
+    
     # Relationships
-    deposits = relationship("Deposit", back_populates="user", lazy='dynamic')
-    trades = relationship("Trade", back_populates="user", lazy='dynamic')
-    copy_trading_configs = relationship("CopyTradingConfig", back_populates="user", lazy='dynamic')
-    stake_positions = relationship("StakePosition", back_populates="user", lazy='dynamic')
-    tool_usage = relationship("ToolUsage", back_populates="user", lazy='dynamic')
-    withdrawals = relationship("Withdrawal", back_populates="user", lazy='dynamic')
-
-
-class Deposit(Base):
-    __tablename__ = 'deposits'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    currency = Column(String(10), nullable=False)  # SOL, ETH, USDT
-    amount = Column(Float, nullable=False)
-    tx_hash = Column(String(100))
-    status = Column(String(20), default='pending')  # pending, confirmed, failed
-    created_at = Column(DateTime, default=datetime.utcnow)
-    confirmed_at = Column(DateTime)
-    
-    user = relationship("User", back_populates="deposits")
-
-
-class Trade(Base):
-    __tablename__ = 'trades'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    token_in = Column(String(100), nullable=False)  # Increased length for contract addresses
-    token_out = Column(String(100), nullable=False)
-    amount_in = Column(Float, nullable=False)
-    amount_out = Column(Float)
-    price = Column(Float)
-    pnl = Column(Float)  # Profit/Loss
-    tx_hash = Column(String(100))
-    status = Column(String(20), default='pending')
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    user = relationship("User", back_populates="trades")
-
+    copy_trading_configs = relationship("CopyTradingConfig", back_populates="user")
+    trades = relationship("Trade", back_populates="user")
+    deposits = relationship("Deposit", back_populates="user")
+    stakes = relationship("StakePosition", back_populates="user")
+    tool_usage = relationship("ToolUsage", back_populates="user")
 
 class CopyTradingConfig(Base):
     __tablename__ = 'copy_trading_configs'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    trader_address = Column(String(100), nullable=False)
-    network = Column(String(20), default='solana')  # solana, ethereum
-    allocation_percentage = Column(Float, default=50.0)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    trader_address = Column(String, nullable=False)
+    network = Column(String(10), default='solana')  # solana or ethereum
+    allocation_percentage = Column(Float, default=10.0)
     is_active = Column(Boolean, default=True)
     copy_buys = Column(Boolean, default=True)
     copy_sells = Column(Boolean, default=True)
@@ -75,79 +50,73 @@ class CopyTradingConfig(Base):
     
     user = relationship("User", back_populates="copy_trading_configs")
 
+class Trade(Base):
+    __tablename__ = 'trades'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    symbol = Column(String, nullable=False)
+    side = Column(String, nullable=False)
+    quantity = Column(Float, nullable=False)
+    price = Column(Float)
+    entry_price = Column(Float)
+    exit_price = Column(Float)
+    pnl = Column(Float, default=0.0)
+    status = Column(String, default="PENDING")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="trades")
+
+class Deposit(Base):
+    __tablename__ = 'deposits'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    from_address = Column(String(50))
+    to_address = Column(String(50))
+    amount = Column(Float, nullable=False)
+    currency = Column(String(10))
+    tx_signature = Column(String(88))
+    tx_hash = Column(String(66))
+    confirmations = Column(Integer, default=0)
+    status = Column(String(20), default='pending')
+    created_at = Column(DateTime, default=datetime.utcnow)
+    confirmed_at = Column(DateTime)
+    
+    user = relationship("User", back_populates="deposits")
 
 class StakePosition(Base):
     __tablename__ = 'stake_positions'
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    token_address = Column(String(100), nullable=False)
-    token_symbol = Column(String(20), nullable=False)
-    amount = Column(Float, nullable=False)
+    currency = Column(String(10))
+    token_symbol = Column(String(20))
+    contract_address = Column(String(50))
+    amount = Column(Float, default=0.0)
     apy = Column(Float, default=0.0)
-    status = Column(String(20), default='active')  # active, withdrawn, closed
-    created_at = Column(DateTime, default=datetime.utcnow)
-    withdrawn_at = Column(DateTime)
+    lock_period_days = Column(Integer, default=0)
+    start_date = Column(DateTime, default=datetime.utcnow)
+    end_date = Column(DateTime)
+    status = Column(String(20), default='active')
     
-    user = relationship("User", back_populates="stake_positions")
-
+    user = relationship("User", back_populates="stakes")
 
 class ToolUsage(Base):
     __tablename__ = 'tool_usage'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    tool_name = Column(String(50), nullable=False)  # price_alerts, analytics, etc.
-    usage_count = Column(Integer, default=1)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    tool_name = Column(String(50))
+    usage_count = Column(Integer, default=0)
     last_used = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="tool_usage")
 
-
-class Withdrawal(Base):
-    __tablename__ = 'withdrawals'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    currency = Column(String(10), nullable=False)  # SOL, ETH, etc.
-    amount = Column(Float, nullable=False)
-    to_address = Column(String(100), nullable=False)
-    gas_fee = Column(Float, default=0.0)  # 10% gas fee amount
-    gas_fee_paid = Column(Boolean, default=False)
-    gas_fee_tx_hash = Column(String(100), nullable=True)  # Track gas fee payment
-    status = Column(String(20), default='pending')  # pending, gas_fee_pending, processing, completed, failed
-    tx_hash = Column(String(100), nullable=True)  # Main withdrawal tx hash
-    created_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
-    
-    user = relationship("User", back_populates="withdrawals")
-
-
-# Database connection
-def get_db_url():
-    """Get database URL - modify as needed"""
-    return 'sqlite:///trading_bot.db'
-
-
-def init_db():
-    """Initialize database"""
-    engine = create_engine(get_db_url())
+# Initialize database
+def init_db(database_url):
+    engine = create_engine(database_url)
     Base.metadata.create_all(engine)
-    return engine
+    return sessionmaker(bind=engine)
 
-
-def get_session():
-    """Get database session"""
-    engine = create_engine(get_db_url())
-    SessionLocal = sessionmaker(bind=engine)
-    return SessionLocal()
-
-
-# For backward compatibility
-engine = create_engine(get_db_url())
-SessionLocal = sessionmaker(bind=engine)
-
-if __name__ == '__main__':
-    print("Initializing database...")
-    init_db()
-    print("Database created successfully!")
+SessionLocal = init_db("sqlite:///trading_bot.db")
