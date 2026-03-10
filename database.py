@@ -1,13 +1,12 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 
-# THIS WAS MISSING - Create Base
 Base = declarative_base()
 
-class User(Base):  # <-- Must inherit from Base
-    __tablename__ = 'users'  # <-- THIS WAS MISSING
+class User(Base):
+    __tablename__ = 'users'
     
     id = Column(Integer, primary_key=True)
     telegram_id = Column(Integer, unique=True, nullable=False)
@@ -32,6 +31,8 @@ class User(Base):  # <-- Must inherit from Base
     copy_trading_configs = relationship("CopyTradingConfig", back_populates="user")
     trades = relationship("Trade", back_populates="user")
     deposits = relationship("Deposit", back_populates="user")
+    stakes = relationship("StakePosition", back_populates="user")
+    tool_usage = relationship("ToolUsage", back_populates="user")
 
 class CopyTradingConfig(Base):
     __tablename__ = 'copy_trading_configs'
@@ -39,8 +40,12 @@ class CopyTradingConfig(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     trader_address = Column(String, nullable=False)
+    network = Column(String(10), default='solana')  # solana or ethereum
     allocation_percentage = Column(Float, default=10.0)
     is_active = Column(Boolean, default=True)
+    copy_buys = Column(Boolean, default=True)
+    copy_sells = Column(Boolean, default=True)
+    max_slippage = Column(Float, default=2.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="copy_trading_configs")
@@ -54,6 +59,9 @@ class Trade(Base):
     side = Column(String, nullable=False)
     quantity = Column(Float, nullable=False)
     price = Column(Float)
+    entry_price = Column(Float)
+    exit_price = Column(Float)
+    pnl = Column(Float, default=0.0)
     status = Column(String, default="PENDING")
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -64,30 +72,18 @@ class Deposit(Base):
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    
     from_address = Column(String(50))
     to_address = Column(String(50))
     amount = Column(Float, nullable=False)
     currency = Column(String(10))
-    
     tx_signature = Column(String(88))
     tx_hash = Column(String(66))
     confirmations = Column(Integer, default=0)
     status = Column(String(20), default='pending')
-    
     created_at = Column(DateTime, default=datetime.utcnow)
     confirmed_at = Column(DateTime)
     
     user = relationship("User", back_populates="deposits")
-
-# Initialize database
-def init_db(database_url):
-    engine = create_engine(database_url)
-    Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine)
-
-SessionLocal = init_db("sqlite:///trading_bot.db")
-# Add to database.py
 
 class StakePosition(Base):
     __tablename__ = 'stake_positions'
@@ -102,9 +98,25 @@ class StakePosition(Base):
     lock_period_days = Column(Integer, default=0)
     start_date = Column(DateTime, default=datetime.utcnow)
     end_date = Column(DateTime)
-    status = Column(String(20), default='active')  # active, completed, cancelled
+    status = Column(String(20), default='active')
     
     user = relationship("User", back_populates="stakes")
 
-# Add to User class:
-stakes = relationship("StakePosition", back_populates="user")
+class ToolUsage(Base):
+    __tablename__ = 'tool_usage'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    tool_name = Column(String(50))
+    usage_count = Column(Integer, default=0)
+    last_used = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="tool_usage")
+
+# Initialize database
+def init_db(database_url):
+    engine = create_engine(database_url)
+    Base.metadata.create_all(engine)
+    return sessionmaker(bind=engine)
+
+SessionLocal = init_db("sqlite:///trading_bot.db")
