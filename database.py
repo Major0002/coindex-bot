@@ -113,20 +113,6 @@ class ToolUsage(Base):
     
     user = relationship("User", back_populates="tool_usage")
 
-class StakePosition(Base):
-    __tablename__ = 'stake_positions'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    currency = Column(String(10))
-    token_symbol = Column(String(20))
-    contract_address = Column(String(50))
-    amount = Column(Float, default=0.0)
-    apy = Column(Float, default=0.0)
-    lock_period_days = Column(Integer, default=0)
-    start_date = Column(DateTime, default=datetime.utcnow)
-    end_date = Column(DateTime)
-    status = Column(String(20), default='active')
     
     # NEW FIELDS FOR MEMECOIN STAKING
     network = Column(String(10), default='solana')  # solana or ethereum
