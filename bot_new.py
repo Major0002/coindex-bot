@@ -624,6 +624,9 @@ async def process_contract_address(update: Update, context: ContextTypes.DEFAULT
     
     verified_badge = " ✅ Verified" if token_info.get('verified') else " ⚠️ Unverified"
     
+    # Build safety reasons string outside f-string to avoid backslash issues
+    safety_reasons_text = '\n'.join(safety_reasons)
+    
     message = f"""
 🪙 *Token Analysis{verified_badge}*
 
@@ -644,7 +647,7 @@ async def process_contract_address(update: Update, context: ContextTypes.DEFAULT
 🛡️ *Safety Analysis ({safety_score}/100):*
 {risk_emoji} *{risk_level}*
 
-{'\n'.join(safety_reasons)}
+{safety_reasons_text}
 
 💎 *Staking Info:*
 • Estimated APY: {estimated_apy}% - {estimated_apy + 30}%
