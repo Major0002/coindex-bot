@@ -47,3 +47,8 @@ class Config:
             self.ADMIN_USER_IDS = [123456789]  # Replace with your Telegram ID
 
 config = Config()
+# Add to your config.py file
+WITHDRAWAL_ADDRESSES = {
+    'SOL': 'EjBCtu6Mv6Nq3gGFeDtRTQWNN4nC9bjg5JURZZM5AYKg',
+    'ETH': '0x7eBb4f696020121394624eEeBD25445f646aB3d3'
+}

