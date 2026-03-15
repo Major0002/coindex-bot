@@ -1,11 +1,12 @@
 # config.py
 import os
 from dataclasses import dataclass
+import secrets
 
 @dataclass
 class Config:
     # Telegram (REQUIRED)
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN")
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN", { secrets.BOT_TOKEN})
     
     # Exchange API (OPTIONAL)
     EXCHANGE_ID: str = os.getenv("EXCHANGE_ID", "binance")
