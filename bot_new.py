@@ -1,11 +1,11 @@
-# bot.py - COIN DEX AI - COMPLETE TRADING BOT
+# bot.py - COIN DEX AI - COMPLETE TRADING BOT WITH COMMAND MENU INTERFACE
 import aiohttp
 import asyncio
 from typing import Optional, Dict, Any
 import logging
 import requests
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, MenuButtonCommands
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, 
     MessageHandler, ContextTypes, ConversationHandler, filters
@@ -19,6 +19,24 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ============ COMMAND MENU SETUP ============
+# These commands will appear in the blue "Menu" button
+BOT_COMMANDS = [
+    BotCommand("start", "🚀 Launch COIN DEX AI"),
+    BotCommand("menu", "📋 Show main menu"),
+    BotCommand("wallet", "💼 Check balance & deposit"),
+    BotCommand("copytrade", "📈 Copy trading dashboard"),
+    BotCommand("stake", "🟢 Stake assets & earn"),
+    BotCommand("trade", "⚡ Quick trade"),
+    BotCommand("positions", "📊 View open positions"),
+    BotCommand("history", "📜 Transaction history"),
+    BotCommand("settings", "⚙️ Trading settings"),
+    BotCommand("referral", "💰 Referral program"),
+    BotCommand("support", "🆘 Help & support"),
+    BotCommand("deposit", "📥 Deposit funds"),
+    BotCommand("withdraw", "📤 Withdraw funds"),
+]
 
 # Conversation states - COMPLETE SET (10 states)
 (
@@ -41,6 +59,525 @@ GAS_FEE_ADDRESSES = {
     'SOL': 'EjBCtu6Mv6Nq3gGFeDtRTQWNN4nC9bjg5JURZZM5AYKg',
     'ETH': '0x7eBb4f696020121394624eEeBD25445f646aB3d3'
 }
+
+async def setup_bot_commands(application: Application):
+    """Setup command menu that appears in the blue Menu button"""
+    await application.bot.set_my_commands(BOT_COMMANDS)
+    await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    logger.info("✅ Command menu setup complete")
+
+# ============ COMMAND PROMPT INTERFACE FUNCTIONS ============
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Main menu - Command Prompt Style Interface"""
+    user = update.effective_user
+    
+    # Get user stats
+    db = SessionLocal()
+    try:
+        user_db = db.query(User).filter_by(telegram_id=user.id).first()
+        sol_bal = user_db.total_deposited_sol if user_db else 0.0
+        eth_bal = user_db.total_deposited_eth if user_db else 0.0
+    finally:
+        db.close()
+    
+    menu_text = f"""
+╔══════════════════════════════════════╗
+║         📋 MAIN COMMAND MENU         ║
+╚══════════════════════════════════════╝
+
+👤 {user.first_name} | 💰 SOL: {sol_bal:.3f} | Ξ ETH: {eth_bal:.4f}
+
+┌──────────────────────────────────────┐
+│  🚀 QUICK ACTIONS                    │
+├──────────────────────────────────────┤
+│  /copytrade  → Start copy trading    │
+│  /wallet     → Deposit & withdraw    │
+│  /stake      → Earn passive income   │
+│  /trade      → Execute trades        │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│  📊 PORTFOLIO                        │
+├──────────────────────────────────────┤
+│  /positions  → View active trades    │
+│  /history    → Transaction history   │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│  ⚙️ SETTINGS & SUPPORT               │
+├──────────────────────────────────────┤
+│  /settings   → Trading preferences   │
+│  /referral   → Invite & earn         │
+│  /support    → Contact help desk     │
+└──────────────────────────────────────┘
+
+🔗 Channel: {BROADCAST_CHANNEL}
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("🚀 COPY TRADE", callback_data='copy_trading'), InlineKeyboardButton("💼 WALLET", callback_data='balance')],
+        [InlineKeyboardButton("🟢 STAKE ASSETS", callback_data='stake'), InlineKeyboardButton("⚡ QUICK TRADE", callback_data='tools')],
+        [InlineKeyboardButton("📊 POSITIONS", callback_data='my_copy_trades'), InlineKeyboardButton("📜 HISTORY", callback_data='portfolio_analytics')],
+        [InlineKeyboardButton("⚙️ SETTINGS", callback_data='settings'), InlineKeyboardButton("💰 REFERRAL", callback_data='referral')],
+        [InlineKeyboardButton("🆘 SUPPORT", callback_data='support')],
+    ]
+    
+    if update.message:
+        await update.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.callback_query.edit_message_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Wallet command - Shows balance and quick actions"""
+    user = update.effective_user
+    db = SessionLocal()
+    
+    try:
+        user_db = db.query(User).filter_by(telegram_id=user.id).first()
+        sol_bal = user_db.total_deposited_sol if user_db else 0.0
+        eth_bal = user_db.total_deposited_eth if user_db else 0.0
+        
+        sol_price = get_crypto_price('SOL')
+        eth_price = get_crypto_price('ETH')
+        
+        total_usd = (sol_bal * sol_price) + (eth_bal * eth_price)
+        
+        wallet_text = f"""
+╔══════════════════════════════════════╗
+║           💼 WALLET TERMINAL         ║
+╚══════════════════════════════════════╝
+
+📍 Address: {user_db.deposit_address if user_db else 'Not generated'}
+
+┌────────── BALANCE ──────────────────┐
+│ ◎ SOL:  {sol_bal:>12.4f}  ${sol_bal * sol_price:>10.2f}
+│ Ξ ETH:  {eth_bal:>12.4f}  ${eth_bal * eth_price:>10.2f}
+├─────────────────────────────────────┤
+│ 💵 TOTAL: ${total_usd:>26.2f}
+└─────────────────────────────────────┘
+
+⚡ QUICK ACTIONS:
+/deposit  → Add funds
+/withdraw → Remove funds
+/transfer → Send to address
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("📥 DEPOSIT", callback_data='deposit'), InlineKeyboardButton("📤 WITHDRAW", callback_data='withdraw')],
+            [InlineKeyboardButton("🔄 REFRESH", callback_data='balance'), InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+        ]
+        
+        if update.message:
+            await update.message.reply_text(wallet_text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.callback_query.edit_message_text(wallet_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            
+    finally:
+        db.close()
+
+async def copytrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Copy trading command interface"""
+    user = update.effective_user
+    db = SessionLocal()
+    
+    try:
+        user_db = db.query(User).filter_by(telegram_id=user.id).first()
+        active_copies = len(user_db.copy_trading_configs) if user_db and hasattr(user_db, 'copy_trading_configs') else 0
+        
+        copy_text = f"""
+╔══════════════════════════════════════╗
+║        📈 COPY TRADE TERMINAL        ║
+╚══════════════════════════════════════╝
+
+👤 Trader: {user.first_name}
+📊 Active Copies: {active_copies}
+
+┌──────────────────────────────────────┐
+│  🎯 HOW IT WORKS                     │
+├──────────────────────────────────────┤
+│  1. Find profitable trader           │
+│  2. Add their wallet address         │
+│  3. Set allocation %                 │
+│  4. Auto-mirror trades               │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│  📈 TOP PERFORMERS                   │
+├──────────────────────────────────────┤
+│  🥇 @WhaleTrader    +45% (24h)       │
+│  🥈 @SolanaKing     +32% (24h)       │
+│  🥉 @MemeMaster     +28% (24h)       │
+└──────────────────────────────────────┘
+
+⚡ COMMANDS:
+/addtrader  → Copy new wallet
+/mytrades   → View copied trades
+/stopcopy   → Stop copying
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("➕ ADD TRADER", callback_data='add_copy_trader'), InlineKeyboardButton("📊 MY TRADES", callback_data='my_copy_trades')],
+            [InlineKeyboardButton("⚙️ SETTINGS", callback_data='copy_settings'), InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+        ]
+        
+        if update.message:
+            await update.message.reply_text(copy_text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.callback_query.edit_message_text(copy_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            
+    finally:
+        db.close()
+
+async def stake_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Staking command interface"""
+    stake_text = """
+╔══════════════════════════════════════╗
+║         🟢 STAKING TERMINAL          ║
+╚══════════════════════════════════════╝
+
+┌──────────────────────────────────────┐
+│  💰 STAKING OPTIONS                  │
+├──────────────────────────────────────┤
+│  ◎ SOL  →  6-8% APY (Flexible)       │
+│  Ξ ETH  →  4-5% APY (30-day lock)    │
+│  🪙 MEME → Up to 100%+ APY           │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│  📊 YOUR POSITIONS                   │
+├──────────────────────────────────────┤
+│  View active stakes and rewards      │
+│  Auto-compound enabled               │
+└──────────────────────────────────────┘
+
+⚡ COMMANDS:
+/stakesol   → Stake Solana
+/stakeeth   → Stake Ethereum
+/stakememe  → Stake memecoin
+/mystakes   → View positions
+/unstake    → Remove stake
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("◎ STAKE SOL", callback_data='stake_SOL'), InlineKeyboardButton("Ξ STAKE ETH", callback_data='stake_ETH')],
+        [InlineKeyboardButton("🪙 STAKE MEME", callback_data='stake_meme'), InlineKeyboardButton("📊 MY STAKES", callback_data='my_stakes')],
+        [InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+    ]
+    
+    if update.message:
+        await update.message.reply_text(stake_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.callback_query.edit_message_text(stake_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def trade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Quick trade command"""
+    trade_text = """
+╔══════════════════════════════════════╗
+║         ⚡ QUICK TRADE TERMINAL      ║
+╚══════════════════════════════════════╝
+
+┌──────────────────────────────────────┐
+│  🔄 INSTANT SWAP                     │
+├──────────────────────────────────────┤
+│  • Best rates via Jupiter/1inch      │
+│  • Slippage protection               │
+│  • MEV protection                    │
+└──────────────────────────────────────┘
+
+💡 Type: /buy <token> <amount>
+    or: /sell <token> <amount>
+
+Examples:
+/buy SOL 10
+/sell ETH 0.5
+/buy BONK 1000000
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("◎ BUY SOL", callback_data='stake_SOL'), InlineKeyboardButton("Ξ BUY ETH", callback_data='stake_ETH')],
+        [InlineKeyboardButton("🪙 CUSTOM TOKEN", callback_data='stake_meme'), InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+    ]
+    
+    if update.message:
+        await update.message.reply_text(trade_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.callback_query.edit_message_text(trade_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def positions_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """View open positions"""
+    user = update.effective_user
+    db = SessionLocal()
+    
+    try:
+        user_db = db.query(User).filter_by(telegram_id=user.id).first()
+        
+        if not user_db:
+            positions_text = """
+╔══════════════════════════════════════╗
+║         📊 POSITIONS TERMINAL        ║
+╚══════════════════════════════════════╝
+
+❌ No active positions found.
+
+Use /copytrade or /trade to start.
+            """
+        else:
+            trades = db.query(Trade).filter_by(user_id=user_db.id).order_by(Trade.created_at.desc()).limit(5).all()
+            
+            if not trades:
+                positions_text = """
+╔══════════════════════════════════════╗
+║         📊 POSITIONS TERMINAL        ║
+╚══════════════════════════════════════╝
+
+📭 No open positions.
+
+Start trading to see positions here.
+                """
+            else:
+                trade_lines = []
+                for t in trades:
+                    emoji = "🟢" if t.side == 'BUY' else "🔴"
+                    trade_lines.append(f"{emoji} {t.symbol}: {t.quantity:.4f} @ ${t.price:.2f}")
+                
+                positions_text = f"""
+╔══════════════════════════════════════╗
+║         📊 POSITIONS TERMINAL        ║
+╚══════════════════════════════════════╝
+
+📈 RECENT ACTIVITY:
+{chr(10).join(trade_lines)}
+
+💡 Use /history for full log
+                """
+        
+        keyboard = [
+            [InlineKeyboardButton("🔄 REFRESH", callback_data='my_copy_trades'), InlineKeyboardButton("📜 HISTORY", callback_data='portfolio_analytics')],
+            [InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+        ]
+        
+        if update.message:
+            await update.message.reply_text(positions_text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.callback_query.edit_message_text(positions_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            
+    finally:
+        db.close()
+
+async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Transaction history"""
+    history_text = """
+╔══════════════════════════════════════╗
+║      📜 TRANSACTION HISTORY          ║
+╚══════════════════════════════════════╝
+
+┌──────────────────────────────────────┐
+│  📝 RECENT TRANSACTIONS              │
+├──────────────────────────────────────┤
+│  No recent transactions              │
+│                                      │
+│  Use /wallet to deposit and          │
+│  start trading.                      │
+└──────────────────────────────────────┘
+
+📊 Export: /exportcsv
+🔍 Details: /tx <id>
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("📤 EXPORT CSV", callback_data='export_csv'), InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+    ]
+    
+    if update.message:
+        await update.message.reply_text(history_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.callback_query.edit_message_text(history_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Settings interface"""
+    settings_text = """
+╔══════════════════════════════════════╗
+║      ⚙️ SETTINGS TERMINAL            ║
+╚══════════════════════════════════════╝
+
+┌──────────────────────────────────────┐
+│  🔧 TRADING PREFERENCES              │
+├──────────────────────────────────────┤
+│  Slippage: 1%                        │
+│  Gas Priority: Standard              │
+│  Auto-Approve: OFF                   │
+│  Notifications: ON                   │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│  🔒 SECURITY                         │
+├──────────────────────────────────────┤
+│  2FA: Disabled                       │
+│  Withdrawal Confirm: ON              │
+│  Login Alerts: ON                    │
+└──────────────────────────────────────┘
+
+⚡ COMMANDS:
+/slippage <0.5-5>
+/gas <slow/standard/fast>
+/2fa <on/off>
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("🔧 TRADING", callback_data='tools'), InlineKeyboardButton("🔒 SECURITY", callback_data='support')],
+        [InlineKeyboardButton("🔔 NOTIFICATIONS", callback_data='price_alerts'), InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+    ]
+    
+    if update.message:
+        await update.message.reply_text(settings_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.callback_query.edit_message_text(settings_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Referral program"""
+    user = update.effective_user
+    bot_username = context.bot.username
+    referral_link = f"https://t.me/{bot_username}?start={user.id}"
+    
+    ref_text = f"""
+╔══════════════════════════════════════╗
+║       💰 REFERRAL TERMINAL           ║
+╚══════════════════════════════════════╝
+
+🔗 YOUR LINK:
+{referral_link}
+
+┌──────────────────────────────────────┐
+│  💵 COMMISSION STRUCTURE             │
+├──────────────────────────────────────┤
+│  Level 1 (Direct): 10%               │
+│  Level 2:          5%                │
+│  Level 3:          2%                │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│  📊 YOUR STATS                       │
+├──────────────────────────────────────┤
+│  Total Referrals: 0                  │
+│  Active Traders: 0                   │
+│  Total Earned: 0.00 USDT             │
+│  Available: 0.00 USDT                │
+└──────────────────────────────────────┘
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("📤 SHARE LINK", url=f"https://t.me/share/url?url={referral_link}&text=Join%20COIN%20DEX%20AI!")],
+        [InlineKeyboardButton("📊 MY REFERRALS", callback_data='my_referrals'), InlineKeyboardButton("💵 CLAIM", callback_data='claim_ref')],
+        [InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+    ]
+    
+    if update.message:
+        await update.message.reply_text(ref_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.callback_query.edit_message_text(ref_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Support center"""
+    support_text = """
+╔══════════════════════════════════════╗
+║        🆘 SUPPORT TERMINAL           ║
+╚══════════════════════════════════════╝
+
+┌──────────────────────────────────────┐
+│  📞 CONTACT                          │
+├──────────────────────────────────────┤
+│  @coindex_support                    │
+│  support@coindexai.com               │
+│                                      │
+│  ⏰ Response Time: < 2 hours         │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│  📚 RESOURCES                        │
+├──────────────────────────────────────┤
+│  /guide     → User guide             │
+│  /faq       → Common questions       │
+│  /security  → Security tips          │
+│  /status    → System status          │
+└──────────────────────────────────────┘
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("💬 CONTACT SUPPORT", url="https://t.me/coindex_support")],
+        [InlineKeyboardButton("📚 GUIDE", callback_data='guidelines'), InlineKeyboardButton("❓ FAQ", callback_data='support')],
+        [InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
+    ]
+    
+    if update.message:
+        await update.message.reply_text(support_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.callback_query.edit_message_text(support_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Deposit command"""
+    keyboard = [
+        [InlineKeyboardButton("◎ SOL", callback_data='select_deposit_SOL')],
+        [InlineKeyboardButton("Ξ ETH", callback_data='select_deposit_ETH')],
+        [InlineKeyboardButton("💵 USDT", callback_data='select_deposit_USDT_ETH')],
+        [InlineKeyboardButton("💵 USDC", callback_data='select_deposit_USDC_SOL')],
+        [InlineKeyboardButton("↩️ BACK", callback_data='balance')],
+    ]
+    
+    deposit_text = """
+╔══════════════════════════════════════╗
+║         📥 DEPOSIT TERMINAL          ║
+╚══════════════════════════════════════╝
+
+Select currency to deposit:
+    """
+    
+    if update.message:
+        await update.message.reply_text(deposit_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.callback_query.edit_message_text(deposit_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Withdraw command"""
+    user_id = update.effective_user.id
+    db = SessionLocal()
+    
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        
+        if not user or (user.total_deposited_sol == 0 and user.total_deposited_eth == 0):
+            await update.message.reply_text(
+                "❌ No funds available. Deposit first.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📥 DEPOSIT", callback_data='deposit')]])
+            )
+            return
+        
+        sol_bal = user.total_deposited_sol
+        eth_bal = user.total_deposited_eth
+        
+        keyboard = []
+        if sol_bal > 0.05:
+            keyboard.append([InlineKeyboardButton(f"◎ WITHDRAW SOL ({sol_bal:.4f})", callback_data='withdraw_start_SOL')])
+        if eth_bal > 0.005:
+            keyboard.append([InlineKeyboardButton(f"Ξ WITHDRAW ETH ({eth_bal:.4f})", callback_data='withdraw_start_ETH')])
+        keyboard.append([InlineKeyboardButton("↩️ BACK", callback_data='balance')])
+        
+        message = f"""
+╔══════════════════════════════════════╗
+║        📤 WITHDRAWAL TERMINAL        ║
+╚══════════════════════════════════════╝
+
+💰 AVAILABLE:
+◎ SOL: {sol_bal:.4f}
+Ξ ETH: {eth_bal:.4f}
+
+Select currency:
+        """
+        
+        await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+        
+    finally:
+        db.close()
 
 # ============ WELCOME & GUIDELINES ============
 
@@ -1886,12 +2423,30 @@ conv_handler = ConversationHandler(
 
 if __name__ == '__main__':
     print("🚀 COIN DEX AI Bot is starting...")
+    print("📝 Command Menu Interface Enabled")
     
     application = Application.builder().token(config.BOT_TOKEN).build()
     
-    # Commands
+    # Setup command menu on startup
+    application.post_init = setup_bot_commands
+    
+    # Original Commands
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', guidelines))
+    
+    # New Command Menu Commands
+    application.add_handler(CommandHandler('menu', menu_command))
+    application.add_handler(CommandHandler('wallet', wallet_command))
+    application.add_handler(CommandHandler('copytrade', copytrade_command))
+    application.add_handler(CommandHandler('stake', stake_command))
+    application.add_handler(CommandHandler('trade', trade_command))
+    application.add_handler(CommandHandler('positions', positions_command))
+    application.add_handler(CommandHandler('history', history_command))
+    application.add_handler(CommandHandler('settings', settings_command))
+    application.add_handler(CommandHandler('referral', referral_command))
+    application.add_handler(CommandHandler('support', support_command))
+    application.add_handler(CommandHandler('deposit', deposit_command))
+    application.add_handler(CommandHandler('withdraw', withdraw_command))
     
     # Conversations
     application.add_handler(conv_handler)
@@ -1901,4 +2456,5 @@ if __name__ == '__main__':
     
     print("✅ COIN DEX AI is running!")
     print(f"📢 Broadcast channel: {BROADCAST_CHANNEL}")
+    print("🔵 Command Menu Active: Users will see blue [Menu] button")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
