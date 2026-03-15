@@ -5,7 +5,7 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     # Telegram (REQUIRED)
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "8214865611:AAHgMrtp5Wl3ZrHbWDolbWBDC5v8tBel_ps")
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN")
     
     # Exchange API (OPTIONAL)
     EXCHANGE_ID: str = os.getenv("EXCHANGE_ID", "binance")
