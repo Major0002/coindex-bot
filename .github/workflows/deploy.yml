@@ -2,7 +2,7 @@ name: Deploy to AWS EC2
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -17,32 +17,22 @@ jobs:
       env:
         PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
         HOST: ${{ secrets.EC2_HOST }}
-        USER: 
+        USER: ${{ secrets.EC2_USER }}
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       run: |
-        echo "$PRIVATE_KEY" > coindex.pem
-        chmod 600 coindex.pem
+        echo "$PRIVATE_KEY" > private_key.pem
+        chmod 600 private_key.pem
         
-        ssh -o StrictHostKeyChecking=no -i coindex.pem ${Ubuntu}@${34.238.193.50} '
-          echo "🚀 Deploying COIN DEX AI Bot..."
+        ssh -o StrictHostKeyChecking=no -i private_key.pem ${USER}@${HOST} "
+          echo 'BOT_TOKEN=${BOT_TOKEN}' > /home/ubuntu/coindex-bot/.env
+          echo 'SOL_DEPOSIT=${SOL_DEPOSIT}' >> /home/ubuntu/coindex-bot/.env
+          echo 'ETH_DEPOSIT=${ETH_DEPOSIT}' >> /home/ubuntu/coindex-bot/.env
           
           cd /home/ubuntu/coindex-bot
-          
-          # Pull latest changes
-          git fetch origin
-          git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
-          git pull origin $(git rev-parse --abbrev-ref HEAD)
-          
-          # Install dependencies
+          git pull origin main
           source venv/bin/activate
           pip install -r requirements.txt --quiet 2>/dev/null || true
           
           # Restart bot
           sudo systemctl restart coindex-bot
-          
-          # Check status
-          sleep 3
-          sudo systemctl status coindex-bot --no-pager | head -5
-          
-          echo "✅ Deployment complete!"
-        '
+        "
