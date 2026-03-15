@@ -19,6 +19,8 @@ jobs:
         HOST: ${{ secrets.EC2_HOST }}
         USER: ${{ secrets.EC2_USER }}
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        SOL_DEPOSIT: ${{ secrets.SOL_DEPOSIT }}
+        ETH_DEPOSIT: ${{ secrets.ETH_DEPOSIT }}
       run: |
         echo "$PRIVATE_KEY" > private_key.pem
         chmod 600 private_key.pem
