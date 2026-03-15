@@ -17,7 +17,8 @@ jobs:
       env:
         PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
         HOST: ${{ secrets.EC2_HOST }}
-        USER: ${{ secrets.EC2_USER }}
+        USER: 
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       run: |
         echo "$PRIVATE_KEY" > coindex.pem
         chmod 600 coindex.pem
