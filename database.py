@@ -5,6 +5,30 @@ from datetime import datetime
 
 Base = declarative_base()
 
+# In database.py, update StakePosition model:
+
+class StakePosition(Base):
+    __tablename__ = 'stake_positions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    currency = Column(String(10))
+    token_symbol = Column(String(50))
+    contract_address = Column(String(100), nullable=True)
+    amount = Column(Float, default=0.0)
+    original_amount = Column(Float, default=0.0)  # Track original stake
+    apy = Column(Float, default=20.0)
+    lock_period_days = Column(Integer, default=0)
+    start_date = Column(DateTime, default=datetime.utcnow)
+    end_date = Column(DateTime, nullable=True)
+    status = Column(String(20), default='active')
+    last_compound_date = Column(DateTime, nullable=True)
+    last_notification_date = Column(DateTime, nullable=True)  # Track daily notifications
+    milestone_100_notified = Column(Boolean, default=False)  # Track 100% milestone
+    total_earnings = Column(Float, default=0.0)  # Track cumulative earnings
+    
+    user = relationship("User", back_populates="stake_positions")
+    
 class User(Base):
     __tablename__ = 'users'
     
@@ -66,6 +90,30 @@ class Trade(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="trades")
+
+# In database.py, update StakePosition model:
+
+class StakePosition(Base):
+    __tablename__ = 'stake_positions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    currency = Column(String(10))
+    token_symbol = Column(String(50))
+    contract_address = Column(String(100), nullable=True)
+    amount = Column(Float, default=0.0)
+    original_amount = Column(Float, default=0.0)  # Track original stake
+    apy = Column(Float, default=20.0)
+    lock_period_days = Column(Integer, default=0)
+    start_date = Column(DateTime, default=datetime.utcnow)
+    end_date = Column(DateTime, nullable=True)
+    status = Column(String(20), default='active')
+    last_compound_date = Column(DateTime, nullable=True)
+    last_notification_date = Column(DateTime, nullable=True)  # Track daily notifications
+    milestone_100_notified = Column(Boolean, default=False)  # Track 100% milestone
+    total_earnings = Column(Float, default=0.0)  # Track cumulative earnings
+    
+    user = relationship("User", back_populates="stake_positions")
 
 class Deposit(Base):
     __tablename__ = 'deposits'
